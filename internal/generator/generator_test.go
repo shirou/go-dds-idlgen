@@ -445,6 +445,137 @@ func TestGenerate_NestedModules(t *testing.T) {
 	}
 }
 
+func TestGenerate_CrossPackageTypeRef(t *testing.T) {
+	g, err := New(Config{
+		OutputDir:     "/tmp/test",
+		PackagePrefix: "example.com/project/gen",
+	})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			&ast.Module{
+				Name: "Org",
+				Definitions: []ast.Definition{
+					&ast.Module{
+						Name: "Common",
+						Definitions: []ast.Definition{
+							&ast.Module{
+								Name: "Measurement",
+								Definitions: []ast.Definition{
+									&ast.Struct{
+										Name: "NumericGUID",
+										Fields: []ast.Field{
+											{Name: "value", Type: &ast.BasicType{Name: "uint64"}},
+										},
+									},
+								},
+							},
+							&ast.Struct{
+								Name: "IdentifierType",
+								Fields: []ast.Field{
+									{Name: "id", Type: &ast.NamedType{Name: "Org::Common::Measurement::NumericGUID"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	// Check the common package output
+	data, ok := result["org/common"]
+	if !ok {
+		keys := make([]string, 0, len(result))
+		for k := range result {
+			keys = append(keys, k)
+		}
+		t.Fatalf("expected output for 'org/common', got keys: %v", keys)
+	}
+
+	src := string(data)
+
+	// Should use package-qualified type reference
+	if !strings.Contains(src, "measurement.NumericGUID") {
+		t.Errorf("expected 'measurement.NumericGUID' in output:\n%s", src)
+	}
+
+	// Should have import for the measurement package
+	if !strings.Contains(src, `"example.com/project/gen/org/common/measurement"`) {
+		t.Errorf("expected measurement import in output:\n%s", src)
+	}
+
+	// The measurement package itself should NOT have cross-package refs
+	measData, ok := result["org/common/measurement"]
+	if !ok {
+		t.Fatal("expected output for 'org/common/measurement'")
+	}
+	measSrc := string(measData)
+	if strings.Contains(measSrc, "measurement.") {
+		t.Errorf("measurement package should not have self-referencing imports:\n%s", measSrc)
+	}
+}
+
+func TestGenerate_SamePackageTypeRef(t *testing.T) {
+	g, err := New(Config{OutputDir: "/tmp/test"})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			&ast.Module{
+				Name: "sensor",
+				Definitions: []ast.Definition{
+					&ast.Struct{
+						Name: "Config",
+						Fields: []ast.Field{
+							{Name: "value", Type: &ast.BasicType{Name: "uint32"}},
+						},
+					},
+					&ast.Struct{
+						Name: "Reading",
+						Fields: []ast.Field{
+							{Name: "cfg", Type: &ast.NamedType{Name: "sensor::Config"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	data, ok := result["sensor"]
+	if !ok {
+		t.Fatal("expected output for 'sensor'")
+	}
+
+	src := string(data)
+
+	// Same-package reference should NOT have package qualifier
+	if strings.Contains(src, "sensor.Config") {
+		t.Errorf("same-package type should not have package qualifier:\n%s", src)
+	}
+	// Should just be Config (PascalCase)
+	if !strings.Contains(src, "Cfg Config") {
+		t.Errorf("expected 'Cfg Config' field in output:\n%s", src)
+	}
+}
+
 func TestGenerate_EmptyFile(t *testing.T) {
 	g, err := New(Config{OutputDir: "/tmp/test"})
 	if err != nil {

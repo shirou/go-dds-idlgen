@@ -162,7 +162,7 @@ func TestParseConst(t *testing.T) {
 }
 
 func TestParseConstString(t *testing.T) {
-	src := `const string Topic = "UMAA::SA::Foo::Bar";`
+	src := `const string Topic = "Org::SA::Foo::Bar";`
 	p := NewParser("test.idl", []byte(src))
 	file, err := p.ParseFile()
 	if err != nil {
@@ -173,7 +173,7 @@ func TestParseConstString(t *testing.T) {
 		t.Fatalf("expected name 'Topic', got %q", c.Name)
 	}
 	// Value should be a quoted string suitable for Go output.
-	if c.Value != `"UMAA::SA::Foo::Bar"` {
+	if c.Value != `"Org::SA::Foo::Bar"` {
 		t.Fatalf("expected quoted string value, got %q", c.Value)
 	}
 }
@@ -420,7 +420,7 @@ func TestParsePreprocessorDirectives(t *testing.T) {
 
 #include "base.idl"
 
-module UMAA {
+module MyOrg {
     struct Foo {
         long x;
     };
