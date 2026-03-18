@@ -161,6 +161,23 @@ func TestParseConst(t *testing.T) {
 	}
 }
 
+func TestParseConstString(t *testing.T) {
+	src := `const string Topic = "UMAA::SA::Foo::Bar";`
+	p := NewParser("test.idl", []byte(src))
+	file, err := p.ParseFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := file.Definitions[0].(*ast.Const)
+	if c.Name != "Topic" {
+		t.Fatalf("expected name 'Topic', got %q", c.Name)
+	}
+	// Value should be a quoted string suitable for Go output.
+	if c.Value != `"UMAA::SA::Foo::Bar"` {
+		t.Fatalf("expected quoted string value, got %q", c.Value)
+	}
+}
+
 func TestParseInclude(t *testing.T) {
 	src := `
 #include "base.idl"

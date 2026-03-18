@@ -364,7 +364,11 @@ func (p *Parser) parseConst() *ast.Const {
 	// Read the value. It can be an expression with identifiers, numbers, strings, etc.
 	var valueParts []string
 	for p.tok.Kind != TokenSemicolon && p.tok.Kind != TokenEOF {
-		valueParts = append(valueParts, p.tok.Value)
+		if p.tok.Kind == TokenStringLiteral {
+			valueParts = append(valueParts, fmt.Sprintf("%q", p.tok.Value))
+		} else {
+			valueParts = append(valueParts, p.tok.Value)
+		}
 		p.next()
 	}
 	p.expect(TokenSemicolon)
