@@ -1,0 +1,16 @@
+{{range $e := .Enums}}
+// {{pascalCase $e.Name}} represents the IDL enum {{$e.Name}}.
+type {{pascalCase $e.Name}} int32
+
+const (
+{{- range $i, $v := $e.Values}}
+{{- if hasExplicitValue $v}}
+	{{pascalCase $e.Name}}{{$v.Name}} {{pascalCase $e.Name}} = {{enumValueInt $v}}
+{{- else if eq $i 0}}
+	{{pascalCase $e.Name}}{{$v.Name}} {{pascalCase $e.Name}} = iota
+{{- else}}
+	{{pascalCase $e.Name}}{{$v.Name}}
+{{- end}}
+{{- end}}
+)
+{{end}}

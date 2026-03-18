@@ -1,0 +1,12 @@
+module event {
+
+    @appendable
+    struct Event {
+        @key
+        unsigned long event_id;
+        string topic;
+        long timestamp;
+        octet payload[64];
+    };
+
+};

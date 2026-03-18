@@ -1,0 +1,14 @@
+module data {
+
+    @final
+    struct Record {
+        @key
+        long id;
+        string name;
+        @optional
+        string description;
+        @optional
+        double score;
+    };
+
+};

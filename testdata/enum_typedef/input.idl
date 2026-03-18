@@ -1,0 +1,27 @@
+module types {
+
+    enum Color {
+        RED,
+        GREEN,
+        BLUE
+    };
+
+    enum Priority {
+        LOW = 0,
+        MEDIUM = 5,
+        HIGH = 10
+    };
+
+    typedef long Timestamp;
+    typedef string<256> BoundedName;
+
+    const long MAX_ITEMS = 100;
+
+    @final
+    struct Item {
+        Timestamp created_at;
+        BoundedName name;
+        Priority priority;
+    };
+
+};

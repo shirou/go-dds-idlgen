@@ -1,0 +1,13 @@
+module msg {
+
+    @mutable
+    struct FlexMessage {
+        @key @id(0)
+        unsigned long msg_id;
+        @id(1)
+        string content;
+        @id(2) @optional
+        float priority;
+    };
+
+};

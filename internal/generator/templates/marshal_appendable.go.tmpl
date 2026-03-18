@@ -1,0 +1,210 @@
+
+// MarshalCDR serializes {{pascalCase .Struct.Name}} using XCDR2 APPENDABLE encoding (DHEADER).
+func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
+	dh := enc.BeginDHeader()
+{{- range .Struct.Fields}}
+{{- if isOptional .}}
+	if err := enc.WriteBool(s.{{pascalCase .Name}} != nil); err != nil {
+		return err
+	}
+	if s.{{pascalCase .Name}} != nil {
+{{- if isPrimitive .Type}}
+		if err := enc.{{cdrWriteFunc .Type}}(*s.{{pascalCase .Name}}); err != nil {
+			return err
+		}
+{{- else if isSequence .Type}}
+		if err := enc.WriteUint32(uint32(len(s.{{pascalCase .Name}}))); err != nil {
+			return err
+		}
+		for _, elem := range s.{{pascalCase .Name}} {
+{{- if isPrimitive (seqElemTypeRef .Type)}}
+			if err := enc.{{cdrWriteFunc (seqElemTypeRef .Type)}}(elem); err != nil {
+				return err
+			}
+{{- else}}
+			if err := elem.MarshalCDR(enc); err != nil {
+				return err
+			}
+{{- end}}
+		}
+{{- else if isArray .Type}}
+		for _, elem := range s.{{pascalCase .Name}} {
+{{- if isPrimitive (arrElemTypeRef .Type)}}
+			if err := enc.{{cdrWriteFunc (arrElemTypeRef .Type)}}(elem); err != nil {
+				return err
+			}
+{{- else}}
+			if err := elem.MarshalCDR(enc); err != nil {
+				return err
+			}
+{{- end}}
+		}
+{{- else}}
+		if err := s.{{pascalCase .Name}}.MarshalCDR(enc); err != nil {
+			return err
+		}
+{{- end}}
+	}
+{{- else}}
+{{- if isPrimitive .Type}}
+	if err := enc.{{cdrWriteFunc .Type}}(s.{{pascalCase .Name}}); err != nil {
+		return err
+	}
+{{- else if isSequence .Type}}
+	if err := enc.WriteUint32(uint32(len(s.{{pascalCase .Name}}))); err != nil {
+		return err
+	}
+	for _, elem := range s.{{pascalCase .Name}} {
+{{- if isPrimitive (seqElemTypeRef .Type)}}
+		if err := enc.{{cdrWriteFunc (seqElemTypeRef .Type)}}(elem); err != nil {
+			return err
+		}
+{{- else}}
+		if err := elem.MarshalCDR(enc); err != nil {
+			return err
+		}
+{{- end}}
+	}
+{{- else if isArray .Type}}
+	for _, elem := range s.{{pascalCase .Name}} {
+{{- if isPrimitive (arrElemTypeRef .Type)}}
+		if err := enc.{{cdrWriteFunc (arrElemTypeRef .Type)}}(elem); err != nil {
+			return err
+		}
+{{- else}}
+		if err := elem.MarshalCDR(enc); err != nil {
+			return err
+		}
+{{- end}}
+	}
+{{- else}}
+	if err := s.{{pascalCase .Name}}.MarshalCDR(enc); err != nil {
+		return err
+	}
+{{- end}}
+{{- end}}
+{{- end}}
+	enc.FinishDHeader(dh)
+	return nil
+}
+
+// UnmarshalCDR deserializes {{pascalCase .Struct.Name}} using XCDR2 APPENDABLE encoding (DHEADER).
+func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
+	_, err := dec.ReadDHeader()
+	if err != nil {
+		return err
+	}
+{{- range .Struct.Fields}}
+{{- if isOptional .}}
+	{
+		present, err := dec.ReadBool()
+		if err != nil {
+			return err
+		}
+		if present {
+{{- if isPrimitive .Type}}
+			v, err := dec.{{cdrReadFunc .Type}}()
+			if err != nil {
+				return err
+			}
+			s.{{pascalCase .Name}} = &v
+{{- else if isSequence .Type}}
+			n, err := dec.ReadUint32()
+			if err != nil {
+				return err
+			}
+			seq := make({{goType .Type}}, n)
+			for i := uint32(0); i < n; i++ {
+{{- if isPrimitive (seqElemTypeRef .Type)}}
+				v, err := dec.{{cdrReadFunc (seqElemTypeRef .Type)}}()
+				if err != nil {
+					return err
+				}
+				seq[i] = v
+{{- else}}
+				if err := seq[i].UnmarshalCDR(dec); err != nil {
+					return err
+				}
+{{- end}}
+			}
+			s.{{pascalCase .Name}} = seq
+{{- else if isArray .Type}}
+			var arr {{goType .Type}}
+			for i := 0; i < {{arraySize .Type}}; i++ {
+{{- if isPrimitive (arrElemTypeRef .Type)}}
+				v, err := dec.{{cdrReadFunc (arrElemTypeRef .Type)}}()
+				if err != nil {
+					return err
+				}
+				arr[i] = v
+{{- else}}
+				if err := arr[i].UnmarshalCDR(dec); err != nil {
+					return err
+				}
+{{- end}}
+			}
+			s.{{pascalCase .Name}} = &arr
+{{- else}}
+			var v {{goType .Type}}
+			if err := v.UnmarshalCDR(dec); err != nil {
+				return err
+			}
+			s.{{pascalCase .Name}} = &v
+{{- end}}
+		}
+	}
+{{- else}}
+{{- if isPrimitive .Type}}
+	{
+		v, err := dec.{{cdrReadFunc .Type}}()
+		if err != nil {
+			return err
+		}
+		s.{{pascalCase .Name}} = v
+	}
+{{- else if isSequence .Type}}
+	{
+		n, err := dec.ReadUint32()
+		if err != nil {
+			return err
+		}
+		s.{{pascalCase .Name}} = make({{goType .Type}}, n)
+		for i := uint32(0); i < n; i++ {
+{{- if isPrimitive (seqElemTypeRef .Type)}}
+			v, err := dec.{{cdrReadFunc (seqElemTypeRef .Type)}}()
+			if err != nil {
+				return err
+			}
+			s.{{pascalCase .Name}}[i] = v
+{{- else}}
+			if err := s.{{pascalCase .Name}}[i].UnmarshalCDR(dec); err != nil {
+				return err
+			}
+{{- end}}
+		}
+	}
+{{- else if isArray .Type}}
+	{
+		for i := 0; i < {{arraySize .Type}}; i++ {
+{{- if isPrimitive (arrElemTypeRef .Type)}}
+			v, err := dec.{{cdrReadFunc (arrElemTypeRef .Type)}}()
+			if err != nil {
+				return err
+			}
+			s.{{pascalCase .Name}}[i] = v
+{{- else}}
+			if err := s.{{pascalCase .Name}}[i].UnmarshalCDR(dec); err != nil {
+				return err
+			}
+{{- end}}
+		}
+	}
+{{- else}}
+	if err := s.{{pascalCase .Name}}.UnmarshalCDR(dec); err != nil {
+		return err
+	}
+{{- end}}
+{{- end}}
+{{- end}}
+	return nil
+}

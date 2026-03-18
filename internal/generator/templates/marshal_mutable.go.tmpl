@@ -1,0 +1,209 @@
+
+// MarshalCDR serializes {{pascalCase .Struct.Name}} using XCDR2 MUTABLE encoding (PL_CDR2).
+func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
+	dh := enc.BeginDHeader()
+{{- range $i, $f := .Struct.Fields}}
+{{- if isOptional $f}}
+	if s.{{pascalCase $f.Name}} != nil {
+{{- end}}
+	// Field {{$f.Name}} (member ID {{fieldMemberID $f $i}})
+{{- if isFixedPrimitive $f.Type}}
+	if err := enc.WriteEMHeader(false, {{fieldMemberID $f $i}}, {{cdrSerializedSize $f.Type}}); err != nil {
+		return err
+	}
+{{- if isOptional $f}}
+	if err := enc.{{cdrWriteFunc $f.Type}}(*s.{{pascalCase $f.Name}}); err != nil {
+		return err
+	}
+{{- else}}
+	if err := enc.{{cdrWriteFunc $f.Type}}(s.{{pascalCase $f.Name}}); err != nil {
+		return err
+	}
+{{- end}}
+{{- else}}
+	{
+		subEnc := cdr.NewEncoder(enc.ByteOrder())
+{{- if isString $f.Type}}
+{{- if isOptional $f}}
+		if err := subEnc.WriteString(*s.{{pascalCase $f.Name}}); err != nil {
+			return err
+		}
+{{- else}}
+		if err := subEnc.WriteString(s.{{pascalCase $f.Name}}); err != nil {
+			return err
+		}
+{{- end}}
+{{- else if isSequence $f.Type}}
+		if err := subEnc.WriteUint32(uint32(len(s.{{pascalCase $f.Name}}))); err != nil {
+			return err
+		}
+		for _, elem := range s.{{pascalCase $f.Name}} {
+{{- if isPrimitive (seqElemTypeRef $f.Type)}}
+			if err := subEnc.{{cdrWriteFunc (seqElemTypeRef $f.Type)}}(elem); err != nil {
+				return err
+			}
+{{- else}}
+			if err := elem.MarshalCDR(subEnc); err != nil {
+				return err
+			}
+{{- end}}
+		}
+{{- else if isArray $f.Type}}
+		for _, elem := range s.{{pascalCase $f.Name}} {
+{{- if isPrimitive (arrElemTypeRef $f.Type)}}
+			if err := subEnc.{{cdrWriteFunc (arrElemTypeRef $f.Type)}}(elem); err != nil {
+				return err
+			}
+{{- else}}
+			if err := elem.MarshalCDR(subEnc); err != nil {
+				return err
+			}
+{{- end}}
+		}
+{{- else}}
+{{- if isOptional $f}}
+		if err := s.{{pascalCase $f.Name}}.MarshalCDR(subEnc); err != nil {
+			return err
+		}
+{{- else}}
+		if err := s.{{pascalCase $f.Name}}.MarshalCDR(subEnc); err != nil {
+			return err
+		}
+{{- end}}
+{{- end}}
+		subData := subEnc.Bytes()
+		if err := enc.WriteEMHeader(false, {{fieldMemberID $f $i}}, len(subData)); err != nil {
+			return err
+		}
+		if _, err := enc.Write(subData); err != nil {
+			return err
+		}
+	}
+{{- end}}
+{{- if isOptional $f}}
+	}
+{{- end}}
+{{- end}}
+	if err := enc.WritePLCDRSentinel(); err != nil {
+		return err
+	}
+	enc.FinishDHeader(dh)
+	return nil
+}
+
+// UnmarshalCDR deserializes {{pascalCase .Struct.Name}} using XCDR2 MUTABLE encoding (PL_CDR2).
+func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
+	_, err := dec.ReadDHeader()
+	if err != nil {
+		return err
+	}
+	for {
+		_, lc, memberID, nextInt, err := dec.ReadEMHeader()
+		if err != nil {
+			return err
+		}
+		if lc == 7 {
+			break // sentinel
+		}
+		// Determine field size from LC for skipping unknown fields.
+		var fieldSize uint32
+		switch lc {
+		case 0:
+			fieldSize = 1
+		case 1:
+			fieldSize = 2
+		case 2:
+			fieldSize = 4
+		case 3:
+			fieldSize = 8
+		case 4:
+			fieldSize = nextInt
+		case 5:
+			fieldSize = nextInt * 4
+		case 6:
+			fieldSize = nextInt * 8
+		}
+		switch memberID {
+{{- range $i, $f := .Struct.Fields}}
+		case {{fieldMemberID $f $i}}:
+{{- if isFixedPrimitive $f.Type}}
+			v, err := dec.{{cdrReadFunc $f.Type}}()
+			if err != nil {
+				return err
+			}
+{{- if isOptional $f}}
+			s.{{pascalCase $f.Name}} = &v
+{{- else}}
+			s.{{pascalCase $f.Name}} = v
+{{- end}}
+{{- else if isString $f.Type}}
+			v, err := dec.ReadString()
+			if err != nil {
+				return err
+			}
+{{- if isOptional $f}}
+			s.{{pascalCase $f.Name}} = &v
+{{- else}}
+			s.{{pascalCase $f.Name}} = v
+{{- end}}
+{{- else if isSequence $f.Type}}
+			{
+				length, err := dec.ReadUint32()
+				if err != nil {
+					return err
+				}
+				s.{{pascalCase $f.Name}} = make([]{{sequenceElemType $f.Type}}, length)
+				for j := uint32(0); j < length; j++ {
+{{- if isPrimitive (seqElemTypeRef $f.Type)}}
+					v, err := dec.{{cdrReadFunc (seqElemTypeRef $f.Type)}}()
+					if err != nil {
+						return err
+					}
+					s.{{pascalCase $f.Name}}[j] = v
+{{- else}}
+					if err := s.{{pascalCase $f.Name}}[j].UnmarshalCDR(dec); err != nil {
+						return err
+					}
+{{- end}}
+				}
+			}
+{{- else if isArray $f.Type}}
+			{
+				for j := 0; j < {{arraySize $f.Type}}; j++ {
+{{- if isPrimitive (arrElemTypeRef $f.Type)}}
+					v, err := dec.{{cdrReadFunc (arrElemTypeRef $f.Type)}}()
+					if err != nil {
+						return err
+					}
+					s.{{pascalCase $f.Name}}[j] = v
+{{- else}}
+					if err := s.{{pascalCase $f.Name}}[j].UnmarshalCDR(dec); err != nil {
+						return err
+					}
+{{- end}}
+				}
+			}
+{{- else}}
+{{- if isOptional $f}}
+			{
+				var v {{goType $f.Type}}
+				if err := v.UnmarshalCDR(dec); err != nil {
+					return err
+				}
+				s.{{pascalCase $f.Name}} = &v
+			}
+{{- else}}
+			if err := s.{{pascalCase $f.Name}}.UnmarshalCDR(dec); err != nil {
+				return err
+			}
+{{- end}}
+{{- end}}
+{{- end}}
+		default:
+			if err := dec.Skip(int(fieldSize)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

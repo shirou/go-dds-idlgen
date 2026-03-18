@@ -1,0 +1,5 @@
+
+{{range .Consts}}
+// {{pascalCase .Name}} is the IDL constant {{.Name}}.
+const {{pascalCase .Name}} {{goType .Type}} = {{.Value}}
+{{end}}

@@ -1,0 +1,8 @@
+{{range .Structs}}
+// {{pascalCase .Name}} represents the IDL struct {{.Name}}.
+type {{pascalCase .Name}} struct {
+{{- range .Fields}}
+	{{pascalCase .Name}} {{goFieldType .}}
+{{- end}}
+}
+{{end}}

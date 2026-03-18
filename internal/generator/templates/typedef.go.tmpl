@@ -1,0 +1,5 @@
+
+{{range .Typedefs}}
+// {{pascalCase .Name}} is a type alias for the IDL typedef {{.Name}}.
+type {{pascalCase .Name}} = {{goType .Type}}
+{{end}}

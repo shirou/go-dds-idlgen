@@ -1,0 +1,12 @@
+module collection {
+
+    @final
+    struct Matrix {
+        long rows;
+        long cols;
+        sequence<double> data;
+        float values[3];
+        sequence<string> labels;
+    };
+
+};
