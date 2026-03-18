@@ -1,5 +1,45 @@
 
 {{range .Typedefs}}
+{{- if isPrimitive .Type}}
 // {{pascalCase .Name}} is a type alias for the IDL typedef {{.Name}}.
 type {{pascalCase .Name}} = {{goType .Type}}
+{{- else if isArray .Type}}
+// {{pascalCase .Name}} is a defined type for the IDL typedef {{.Name}}.
+type {{pascalCase .Name}} {{goType .Type}}
+
+func (s *{{pascalCase .Name}}) MarshalCDR(enc *cdr.Encoder) error {
+	for _, elem := range s {
+{{- if isPrimitive (arrElemTypeRef .Type)}}
+		if err := enc.{{cdrWriteFunc (arrElemTypeRef .Type)}}(elem); err != nil {
+			return err
+		}
+{{- else}}
+		if err := elem.MarshalCDR(enc); err != nil {
+			return err
+		}
+{{- end}}
+	}
+	return nil
+}
+
+func (s *{{pascalCase .Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
+	for i := 0; i < {{arraySize .Type}}; i++ {
+{{- if isPrimitive (arrElemTypeRef .Type)}}
+		v, err := dec.{{cdrReadFunc (arrElemTypeRef .Type)}}()
+		if err != nil {
+			return err
+		}
+		s[i] = v
+{{- else}}
+		if err := s[i].UnmarshalCDR(dec); err != nil {
+			return err
+		}
+{{- end}}
+	}
+	return nil
+}
+{{- else}}
+// {{pascalCase .Name}} is a defined type for the IDL typedef {{.Name}}.
+type {{pascalCase .Name}} {{goType .Type}}
+{{- end}}
 {{end}}

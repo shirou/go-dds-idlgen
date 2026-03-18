@@ -8,6 +8,32 @@ import (
 	"github.com/shirou/go-dds-idlgen/internal/ast"
 )
 
+// resolveUnderlying follows NamedType → Typedef chains to find the
+// underlying type. This is needed because typedef creates Go type aliases
+// that don't have their own methods (e.g., MarshalCDR).
+// resolveUnderlying follows NamedType → Typedef chains for primitive typedefs.
+// Compound typedefs (array, sequence) are generated as defined types with their
+// own MarshalCDR methods, so we stop at those.
+func resolveUnderlying(t ast.TypeRef) ast.TypeRef {
+	for {
+		nt, ok := t.(*ast.NamedType)
+		if !ok {
+			return t
+		}
+		td, ok := nt.Resolved.(*ast.Typedef)
+		if !ok {
+			return t // resolved to struct/enum/skipped, not a typedef
+		}
+		// Stop at compound typedefs (array, sequence) - they are defined types
+		// with their own MarshalCDR/UnmarshalCDR methods.
+		switch td.Type.(type) {
+		case *ast.ArrayType, *ast.SequenceType:
+			return t
+		}
+		t = td.Type
+	}
+}
+
 // goType converts an IDL TypeRef to a Go type string.
 func goType(t ast.TypeRef) string {
 	switch v := t.(type) {
@@ -235,6 +261,7 @@ func goFieldType(f ast.Field) string {
 
 // cdrAlignment returns the CDR alignment for a type (XCDR2: max 4).
 func cdrAlignment(t ast.TypeRef) int {
+	t = resolveUnderlying(t)
 	switch v := t.(type) {
 	case *ast.BasicType:
 		switch v.Name {
@@ -261,6 +288,7 @@ func cdrAlignment(t ast.TypeRef) int {
 
 // cdrWriteFunc returns the Encoder method name for a basic type.
 func cdrWriteFunc(t ast.TypeRef) string {
+	t = resolveUnderlying(t)
 	switch v := t.(type) {
 	case *ast.BasicType:
 		switch v.Name {
@@ -295,6 +323,7 @@ func cdrWriteFunc(t ast.TypeRef) string {
 
 // cdrReadFunc returns the Decoder method name for a basic type.
 func cdrReadFunc(t ast.TypeRef) string {
+	t = resolveUnderlying(t)
 	switch v := t.(type) {
 	case *ast.BasicType:
 		switch v.Name {
@@ -328,7 +357,9 @@ func cdrReadFunc(t ast.TypeRef) string {
 }
 
 // isPrimitive returns true if the type is a basic or string type (not compound).
+// Follows typedef chains: a NamedType that resolves to a typedef of a primitive is primitive.
 func isPrimitive(t ast.TypeRef) bool {
+	t = resolveUnderlying(t)
 	switch t.(type) {
 	case *ast.BasicType, *ast.StringType:
 		return true
@@ -338,31 +369,31 @@ func isPrimitive(t ast.TypeRef) bool {
 
 // isString returns true if the type is a StringType.
 func isString(t ast.TypeRef) bool {
-	_, ok := t.(*ast.StringType)
+	_, ok := resolveUnderlying(t).(*ast.StringType)
 	return ok
 }
 
 // isFixedPrimitive returns true if the type is a fixed-size primitive (not string).
 func isFixedPrimitive(t ast.TypeRef) bool {
-	_, ok := t.(*ast.BasicType)
+	_, ok := resolveUnderlying(t).(*ast.BasicType)
 	return ok
 }
 
 // isSequence returns true if the type is a SequenceType.
 func isSequence(t ast.TypeRef) bool {
-	_, ok := t.(*ast.SequenceType)
+	_, ok := resolveUnderlying(t).(*ast.SequenceType)
 	return ok
 }
 
 // isArray returns true if the type is an ArrayType.
 func isArray(t ast.TypeRef) bool {
-	_, ok := t.(*ast.ArrayType)
+	_, ok := resolveUnderlying(t).(*ast.ArrayType)
 	return ok
 }
 
 // sequenceElemType returns the Go type string for the element type of a sequence.
 func sequenceElemType(t ast.TypeRef) string {
-	if seq, ok := t.(*ast.SequenceType); ok {
+	if seq, ok := resolveUnderlying(t).(*ast.SequenceType); ok {
 		return goType(seq.ElemType)
 	}
 	return ""
@@ -370,7 +401,7 @@ func sequenceElemType(t ast.TypeRef) string {
 
 // arrayElemType returns the Go type string for the element type of an array.
 func arrayElemType(t ast.TypeRef) string {
-	if arr, ok := t.(*ast.ArrayType); ok {
+	if arr, ok := resolveUnderlying(t).(*ast.ArrayType); ok {
 		return goType(arr.ElemType)
 	}
 	return ""
@@ -378,7 +409,7 @@ func arrayElemType(t ast.TypeRef) string {
 
 // arraySize returns the size of an ArrayType.
 func arraySize(t ast.TypeRef) int {
-	if arr, ok := t.(*ast.ArrayType); ok {
+	if arr, ok := resolveUnderlying(t).(*ast.ArrayType); ok {
 		return arr.Size
 	}
 	return 0
@@ -386,7 +417,7 @@ func arraySize(t ast.TypeRef) int {
 
 // seqElemTypeRef returns the element TypeRef of a sequence type.
 func seqElemTypeRef(t ast.TypeRef) ast.TypeRef {
-	if seq, ok := t.(*ast.SequenceType); ok {
+	if seq, ok := resolveUnderlying(t).(*ast.SequenceType); ok {
 		return seq.ElemType
 	}
 	return nil
@@ -394,7 +425,7 @@ func seqElemTypeRef(t ast.TypeRef) ast.TypeRef {
 
 // arrElemTypeRef returns the element TypeRef of an array type.
 func arrElemTypeRef(t ast.TypeRef) ast.TypeRef {
-	if arr, ok := t.(*ast.ArrayType); ok {
+	if arr, ok := resolveUnderlying(t).(*ast.ArrayType); ok {
 		return arr.ElemType
 	}
 	return nil
@@ -424,6 +455,7 @@ func fieldMemberID(f ast.Field, index int) int {
 
 // cdrSerializedSize returns the fixed serialized size for a type, or 0 if variable.
 func cdrSerializedSize(t ast.TypeRef) int {
+	t = resolveUnderlying(t)
 	switch v := t.(type) {
 	case *ast.BasicType:
 		switch v.Name {

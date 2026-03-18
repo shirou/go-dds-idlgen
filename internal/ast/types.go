@@ -6,7 +6,8 @@ import "fmt"
 type File struct {
 	Name        string       // source file name
 	Includes    []string     // #include paths
-	Definitions []Definition // top-level definitions
+	Definitions []Definition // top-level definitions (included + own)
+	OwnStart    int          // index where the file's own definitions begin
 }
 
 // Definition is the interface for all top-level declarations.

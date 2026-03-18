@@ -27,12 +27,14 @@ type Config struct {
 type genUnit struct {
 	PackageName string
 	PackagePath string
-	ModulePath  []string    // IDL module path, e.g., ["Org", "Common"]
+	ModulePath  []string    // flattened IDL module path, e.g., ["Org", "Common"]
+	FileName    string      // output file name without extension (e.g., "GlobalHoveringHoverType")
 	Imports     []pkgImport // cross-package imports needed
 	Structs     []*ast.Struct
 	Enums       []*ast.Enum
 	Typedefs    []*ast.Typedef
 	Consts      []*ast.Const
+	Skipped     []*ast.SkippedDecl // skipped declarations (union, etc.) to emit as placeholders
 }
 
 // pkgImport represents a Go import for a cross-package type reference.
@@ -45,6 +47,9 @@ type Generator struct {
 	config        Config
 	templates     *template.Template
 	packagePrefix string // resolved Go import prefix for generated packages
+	// emitted tracks type/const names already generated per package path
+	// to avoid redeclaration when sibling sub-modules define the same names.
+	emitted map[string]map[string]bool // relPath -> set of emitted names
 }
 
 // New creates a new Generator.
@@ -91,22 +96,36 @@ func New(cfg Config) (*Generator, error) {
 	g := &Generator{
 		config:    cfg,
 		templates: tmpl,
+		emitted:   make(map[string]map[string]bool),
 	}
 	g.packagePrefix = g.resolvePackagePrefix()
 	return g, nil
+}
+
+// flattenModPath drops the last segment of module paths with depth >= 3,
+// merging leaf-level categorization modules into their parent package.
+func flattenModPath(modPath []string) []string {
+	if len(modPath) >= 3 {
+		return modPath[:len(modPath)-1]
+	}
+	return modPath
 }
 
 // collectUnits flattens an AST file's definitions into per-package genUnits.
 func collectUnits(file *ast.File) map[string]*genUnit {
 	units := make(map[string]*genUnit)
 
+	// Derive output file name from IDL source file name.
+	fileName := strings.TrimSuffix(filepath.Base(file.Name), filepath.Ext(file.Name))
+
 	var collect func(defs []ast.Definition, modPath []string)
 	collect = func(defs []ast.Definition, modPath []string) {
+		flatPath := flattenModPath(modPath)
 		pkg := "main"
 		relPath := "."
-		if len(modPath) > 0 {
-			pkg = strings.ToLower(modPath[len(modPath)-1])
-			relPath = strings.ToLower(strings.Join(modPath, "/"))
+		if len(flatPath) > 0 {
+			pkg = strings.ToLower(flatPath[len(flatPath)-1])
+			relPath = strings.ToLower(strings.Join(flatPath, "/"))
 		}
 
 		for _, def := range defs {
@@ -114,32 +133,108 @@ func collectUnits(file *ast.File) map[string]*genUnit {
 			case *ast.Module:
 				collect(d.Definitions, append(modPath[:len(modPath):len(modPath)], d.Name))
 			case *ast.Struct:
-				u := getOrCreateUnit(units, relPath, pkg, modPath)
-				u.Structs = append(u.Structs, d)
+				u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
+				u.Structs = append(u.Structs, cloneStruct(d))
 			case *ast.Enum:
-				u := getOrCreateUnit(units, relPath, pkg, modPath)
+				u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
 				u.Enums = append(u.Enums, d)
 			case *ast.Typedef:
-				u := getOrCreateUnit(units, relPath, pkg, modPath)
-				u.Typedefs = append(u.Typedefs, d)
+				u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
+				u.Typedefs = append(u.Typedefs, cloneTypedef(d))
 			case *ast.Const:
-				u := getOrCreateUnit(units, relPath, pkg, modPath)
+				u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
 				u.Consts = append(u.Consts, d)
+			case *ast.SkippedDecl:
+				if d.Name != "" {
+					u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
+					u.Skipped = append(u.Skipped, d)
+				}
 			}
 		}
 	}
-	collect(file.Definitions, nil)
+	// Only process the file's own definitions, not included ones.
+	// Included definitions are in Definitions[:OwnStart] and are only
+	// needed for type resolution, not code generation.
+	ownDefs := file.Definitions[file.OwnStart:]
+	collect(ownDefs, nil)
 	return units
 }
 
 // Generate processes an AST file and writes Go source files.
 func (g *Generator) Generate(file *ast.File) error {
 	for relPath, unit := range collectUnits(file) {
+		g.dedup(relPath, unit)
 		if err := g.generateUnit(relPath, unit); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// dedup removes types/consts from a unit that have already been emitted
+// in the same package. It handles both in-process dedup (multiple Generate
+// calls) and cross-process dedup (scanning existing files on disk).
+func (g *Generator) dedup(relPath string, unit *genUnit) {
+	seen := g.emitted[relPath]
+	if seen == nil {
+		seen = make(map[string]bool)
+		// Scan existing generated files in the output directory for declared names.
+		g.scanExistingDecls(relPath, seen)
+		g.emitted[relPath] = seen
+	}
+
+	unit.Structs = deduplicateSlice(unit.Structs, seen, func(s *ast.Struct) string { return pascalCase(s.Name) })
+	unit.Enums = deduplicateSlice(unit.Enums, seen, func(e *ast.Enum) string { return pascalCase(e.Name) })
+	unit.Typedefs = deduplicateSlice(unit.Typedefs, seen, func(t *ast.Typedef) string { return pascalCase(t.Name) })
+	unit.Consts = deduplicateSlice(unit.Consts, seen, func(c *ast.Const) string { return pascalCase(c.Name) })
+	unit.Skipped = deduplicateSlice(unit.Skipped, seen, func(s *ast.SkippedDecl) string { return pascalCase(s.Name) })
+}
+
+// scanExistingDecls reads existing generated .go files in the output directory
+// and extracts declared type/const names into the seen set. This enables dedup
+// across separate process invocations.
+func (g *Generator) scanExistingDecls(relPath string, seen map[string]bool) {
+	dir := filepath.Join(g.config.OutputDir, relPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return // directory doesn't exist yet
+	}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".go" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		for line := range strings.SplitSeq(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			// Match "type Name ..." or "const Name ..."
+			for _, prefix := range []string{"type ", "const "} {
+				if !strings.HasPrefix(line, prefix) {
+					continue
+				}
+				rest := line[len(prefix):]
+				// Extract the identifier (first word)
+				if idx := strings.IndexAny(rest, " =\t"); idx > 0 {
+					seen[rest[:idx]] = true
+				}
+			}
+		}
+	}
+}
+
+func deduplicateSlice[T any](items []T, seen map[string]bool, name func(T) string) []T {
+	result := items[:0]
+	for _, item := range items {
+		n := name(item)
+		if seen[n] {
+			continue
+		}
+		seen[n] = true
+		result = append(result, item)
+	}
+	return result
 }
 
 // GenerateToBuffer processes an AST file and returns the generated Go source
@@ -156,7 +251,7 @@ func (g *Generator) GenerateToBuffer(file *ast.File) (map[string][]byte, error) 
 	return result, nil
 }
 
-func getOrCreateUnit(units map[string]*genUnit, relPath, pkg string, modPath []string) *genUnit {
+func getOrCreateUnit(units map[string]*genUnit, relPath, pkg string, modPath []string, fileName string) *genUnit {
 	u, ok := units[relPath]
 	if !ok {
 		mp := make([]string, len(modPath))
@@ -165,6 +260,7 @@ func getOrCreateUnit(units map[string]*genUnit, relPath, pkg string, modPath []s
 			PackageName: pkg,
 			PackagePath: relPath,
 			ModulePath:  mp,
+			FileName:    fileName,
 		}
 		units[relPath] = u
 	}
@@ -183,7 +279,11 @@ func (g *Generator) generateUnit(relPath string, unit *genUnit) error {
 		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
 
-	outFile := filepath.Join(outDir, "types_gen.go")
+	outFileName := "types_gen.go"
+	if unit.FileName != "" {
+		outFileName = unit.FileName + ".go"
+	}
+	outFile := filepath.Join(outDir, outFileName)
 	if err := os.WriteFile(outFile, data, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outFile, err)
 	}
@@ -229,7 +329,7 @@ func (g *Generator) resolvePackagePrefix() string {
 
 // parseModulePath extracts the module path from go.mod content.
 func parseModulePath(data []byte) string {
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "module ") {
 			return strings.TrimSpace(strings.TrimPrefix(line, "module"))
@@ -242,7 +342,8 @@ func parseModulePath(data []byte) string {
 func (g *Generator) preprocessUnit(unit *genUnit) {
 	imports := make(map[string]string) // pkgAlias -> import path
 
-	resolveNamed := func(nt *ast.NamedType) {
+	resolveNamed := func(ref *ast.TypeRef) {
+		nt := (*ref).(*ast.NamedType)
 		parts := strings.Split(nt.Name, "::")
 		if len(parts) <= 1 {
 			return // simple name, no module prefix
@@ -251,19 +352,23 @@ func (g *Generator) preprocessUnit(unit *genUnit) {
 		typeName := parts[len(parts)-1]
 		typeModPath := parts[:len(parts)-1]
 
-		// Check if same module
-		if sliceEqual(typeModPath, unit.ModulePath) {
-			nt.Name = typeName
+		// Flatten the referenced type's module path to match package grouping.
+		flatTypeModPath := flattenModPath(typeModPath)
+
+		// Check if same package after flattening.
+		// Create a new NamedType to avoid mutating shared/cached AST nodes.
+		if sliceEqual(flatTypeModPath, unit.ModulePath) {
+			*ref = &ast.NamedType{Name: typeName, Resolved: nt.Resolved}
 			return
 		}
 
-		// Different module - use last module segment as package qualifier
-		pkgAlias := strings.ToLower(typeModPath[len(typeModPath)-1])
-		nt.Name = pkgAlias + "::" + typeName
+		// Different package - use last segment of flattened path as package qualifier
+		pkgAlias := strings.ToLower(flatTypeModPath[len(flatTypeModPath)-1])
+		*ref = &ast.NamedType{Name: pkgAlias + "::" + typeName, Resolved: nt.Resolved}
 
 		// Compute import path
 		if g.packagePrefix != "" {
-			pkgPath := strings.ToLower(strings.Join(typeModPath, "/"))
+			pkgPath := strings.ToLower(strings.Join(flatTypeModPath, "/"))
 			imports[pkgAlias] = g.packagePrefix + "/" + pkgPath
 		}
 	}
@@ -285,10 +390,10 @@ func (g *Generator) preprocessUnit(unit *genUnit) {
 	}
 }
 
-func walkTypeRef(ref *ast.TypeRef, fn func(*ast.NamedType)) {
+func walkTypeRef(ref *ast.TypeRef, fn func(*ast.TypeRef)) {
 	switch t := (*ref).(type) {
 	case *ast.NamedType:
-		fn(t)
+		fn(ref)
 	case *ast.SequenceType:
 		walkTypeRef(&t.ElemType, fn)
 	case *ast.ArrayType:
@@ -341,6 +446,14 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 		}
 	}
 
+	// Render placeholder types for skipped declarations (e.g., unions)
+	for _, sk := range unit.Skipped {
+		name := pascalCase(sk.Name)
+		fmt.Fprintf(&buf, "\n// %s is a placeholder for IDL %s (not fully supported).\ntype %s struct{}\n", name, sk.Kind, name)
+		fmt.Fprintf(&buf, "\nfunc (s *%s) MarshalCDR(enc *cdr.Encoder) error { return nil }\n", name)
+		fmt.Fprintf(&buf, "func (s *%s) UnmarshalCDR(dec *cdr.Decoder) error { return nil }\n", name)
+	}
+
 	// Render structs
 	if len(unit.Structs) > 0 {
 		if err := g.templates.ExecuteTemplate(&buf, "struct.go.tmpl", unit); err != nil {
@@ -378,4 +491,36 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 		return nil, fmt.Errorf("format source: %w\n\nraw source:\n%s", err, buf.String())
 	}
 	return formatted, nil
+}
+
+// cloneStruct deep-clones a struct's fields so that preprocessUnit can
+// replace TypeRef values without mutating the cached AST.
+func cloneStruct(s *ast.Struct) *ast.Struct {
+	c := *s
+	c.Fields = make([]ast.Field, len(s.Fields))
+	for i, f := range s.Fields {
+		c.Fields[i] = f
+		c.Fields[i].Type = cloneTypeRef(f.Type)
+	}
+	return &c
+}
+
+// cloneTypedef clones a typedef so its Type can be replaced safely.
+func cloneTypedef(t *ast.Typedef) *ast.Typedef {
+	c := *t
+	c.Type = cloneTypeRef(t.Type)
+	return &c
+}
+
+// cloneTypeRef deep-clones a TypeRef, creating new SequenceType/ArrayType
+// wrappers so that modifying inner NamedTypes doesn't affect the originals.
+func cloneTypeRef(t ast.TypeRef) ast.TypeRef {
+	switch v := t.(type) {
+	case *ast.SequenceType:
+		return &ast.SequenceType{ElemType: cloneTypeRef(v.ElemType), Bound: v.Bound}
+	case *ast.ArrayType:
+		return &ast.ArrayType{ElemType: cloneTypeRef(v.ElemType), Size: v.Size}
+	default:
+		return t
+	}
 }

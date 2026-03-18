@@ -13,4 +13,17 @@ const (
 {{- end}}
 {{- end}}
 )
+
+func (e *{{pascalCase $e.Name}}) MarshalCDR(enc *cdr.Encoder) error {
+	return enc.WriteInt32(int32(*e))
+}
+
+func (e *{{pascalCase $e.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
+	v, err := dec.ReadInt32()
+	if err != nil {
+		return err
+	}
+	*e = {{pascalCase $e.Name}}(v)
+	return nil
+}
 {{end}}

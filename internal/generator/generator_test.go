@@ -454,6 +454,8 @@ func TestGenerate_CrossPackageTypeRef(t *testing.T) {
 		t.Fatalf("New() error: %v", err)
 	}
 
+	// Types in Org::Common::Measurement (depth 3) and Org::Other::Sensors (depth 3)
+	// should be in different flattened packages: org/common and org/other.
 	file := &ast.File{
 		Name: "test.idl",
 		Definitions: []ast.Definition{
@@ -474,10 +476,20 @@ func TestGenerate_CrossPackageTypeRef(t *testing.T) {
 									},
 								},
 							},
-							&ast.Struct{
-								Name: "IdentifierType",
-								Fields: []ast.Field{
-									{Name: "id", Type: &ast.NamedType{Name: "Org::Common::Measurement::NumericGUID"}},
+						},
+					},
+					&ast.Module{
+						Name: "Other",
+						Definitions: []ast.Definition{
+							&ast.Module{
+								Name: "Sensors",
+								Definitions: []ast.Definition{
+									&ast.Struct{
+										Name: "IdentifierType",
+										Fields: []ast.Field{
+											{Name: "id", Type: &ast.NamedType{Name: "Org::Common::Measurement::NumericGUID"}},
+										},
+									},
 								},
 							},
 						},
@@ -492,8 +504,8 @@ func TestGenerate_CrossPackageTypeRef(t *testing.T) {
 		t.Fatalf("GenerateToBuffer() error: %v", err)
 	}
 
-	// Check the common package output
-	data, ok := result["org/common"]
+	// NumericGUID (Org::Common::Measurement) flattens to org/common
+	_, ok := result["org/common"]
 	if !ok {
 		keys := make([]string, 0, len(result))
 		for k := range result {
@@ -502,26 +514,103 @@ func TestGenerate_CrossPackageTypeRef(t *testing.T) {
 		t.Fatalf("expected output for 'org/common', got keys: %v", keys)
 	}
 
+	// IdentifierType (Org::Other::Sensors) flattens to org/other
+	data, ok := result["org/other"]
+	if !ok {
+		keys := make([]string, 0, len(result))
+		for k := range result {
+			keys = append(keys, k)
+		}
+		t.Fatalf("expected output for 'org/other', got keys: %v", keys)
+	}
+
 	src := string(data)
 
-	// Should use package-qualified type reference
-	if !strings.Contains(src, "measurement.NumericGUID") {
-		t.Errorf("expected 'measurement.NumericGUID' in output:\n%s", src)
+	// Should use package-qualified type reference to the common package
+	if !strings.Contains(src, "common.NumericGUID") {
+		t.Errorf("expected 'common.NumericGUID' in output:\n%s", src)
 	}
 
-	// Should have import for the measurement package
-	if !strings.Contains(src, `"example.com/project/gen/org/common/measurement"`) {
-		t.Errorf("expected measurement import in output:\n%s", src)
+	// Should have import for the common package
+	if !strings.Contains(src, `"example.com/project/gen/org/common"`) {
+		t.Errorf("expected common import in output:\n%s", src)
+	}
+}
+
+func TestGenerate_FlattenSamePackage(t *testing.T) {
+	g, err := New(Config{OutputDir: "/tmp/test"})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
 	}
 
-	// The measurement package itself should NOT have cross-package refs
-	measData, ok := result["org/common/measurement"]
+	// Types in sibling sub-modules (Org::Common::Measurement and Org::Common::Enumeration)
+	// should flatten into the same package (org/common).
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			&ast.Module{
+				Name: "Org",
+				Definitions: []ast.Definition{
+					&ast.Module{
+						Name: "Common",
+						Definitions: []ast.Definition{
+							&ast.Module{
+								Name: "Measurement",
+								Definitions: []ast.Definition{
+									&ast.Struct{
+										Name: "NumericGUID",
+										Fields: []ast.Field{
+											{Name: "value", Type: &ast.BasicType{Name: "uint64"}},
+										},
+									},
+								},
+							},
+							&ast.Module{
+								Name: "Enumeration",
+								Definitions: []ast.Definition{
+									&ast.Struct{
+										Name: "SensorReading",
+										Fields: []ast.Field{
+											{Name: "id", Type: &ast.NamedType{Name: "Org::Common::Measurement::NumericGUID"}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	// Both should be in the same package org/common
+	if len(result) != 1 {
+		keys := make([]string, 0, len(result))
+		for k := range result {
+			keys = append(keys, k)
+		}
+		t.Fatalf("expected 1 package, got %d: %v", len(result), keys)
+	}
+
+	data, ok := result["org/common"]
 	if !ok {
-		t.Fatal("expected output for 'org/common/measurement'")
+		t.Fatal("expected output for 'org/common'")
 	}
-	measSrc := string(measData)
-	if strings.Contains(measSrc, "measurement.") {
-		t.Errorf("measurement package should not have self-referencing imports:\n%s", measSrc)
+
+	src := string(data)
+
+	// Same-package reference should NOT have package qualifier
+	if strings.Contains(src, "common.NumericGUID") {
+		t.Errorf("same-package type should not have package qualifier:\n%s", src)
+	}
+	// Should reference NumericGUID without qualifier
+	if !strings.Contains(src, "ID NumericGUID") {
+		t.Errorf("expected 'ID NumericGUID' field in output:\n%s", src)
 	}
 }
 

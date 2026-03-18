@@ -78,6 +78,7 @@ func (r *IncludeResolver) ResolveFile(path string) (*ast.File, error) {
 	if len(includedDefs) > 0 {
 		file.Definitions = append(includedDefs, file.Definitions...)
 	}
+	file.OwnStart = len(includedDefs)
 
 	r.cache[absPath] = file
 	return file, nil
