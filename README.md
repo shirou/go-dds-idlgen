@@ -207,6 +207,11 @@ go build ./cmd/go-dds-idlgen/
 
 # Generate from a sample IDL
 go run ./cmd/go-dds-idlgen/ -o /tmp/out -verbose testdata/basic_struct/input.idl
+
+# Regenerate cross-language interop test fixtures (requires Docker)
+cd testdata/interop
+docker build -t go-dds-idlgen-interop .
+docker run --rm -v "$PWD:/out" go-dds-idlgen-interop
 ```
 
 ## License
