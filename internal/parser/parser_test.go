@@ -396,6 +396,53 @@ struct S {
 	}
 }
 
+func TestParsePreprocessorDirectives(t *testing.T) {
+	src := `
+#ifndef MYFILE_IDL
+#define MYFILE_IDL
+
+#include "base.idl"
+
+module UMAA {
+    struct Foo {
+        long x;
+    };
+};
+
+#endif
+`
+	p := NewParser("test.idl", []byte(src))
+	file, err := p.ParseFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Includes) != 1 || file.Includes[0] != "base.idl" {
+		t.Fatalf("expected 1 include 'base.idl', got %v", file.Includes)
+	}
+	if len(file.Definitions) != 1 {
+		t.Fatalf("expected 1 definition, got %d", len(file.Definitions))
+	}
+}
+
+func TestParseDirectivesOnly(t *testing.T) {
+	src := `
+#ifndef GUARD_H
+#define GUARD_H
+#endif
+`
+	p := NewParser("test.idl", []byte(src))
+	file, err := p.ParseFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Definitions) != 0 {
+		t.Fatalf("expected 0 definitions, got %d", len(file.Definitions))
+	}
+	if len(file.Includes) != 0 {
+		t.Fatalf("expected 0 includes, got %d", len(file.Includes))
+	}
+}
+
 func TestParseTypedefArray(t *testing.T) {
 	src := `typedef octet UUID[16];`
 	p := NewParser("test.idl", []byte(src))

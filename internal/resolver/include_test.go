@@ -183,6 +183,46 @@ struct A { long y; };
 	}
 }
 
+func TestResolveFile_WithIncludeGuards(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile(t, dir, "types.idl", `
+#ifndef TYPES_IDL
+#define TYPES_IDL
+
+struct Color {
+	uint8 r;
+	uint8 g;
+	uint8 b;
+};
+
+#endif
+`)
+
+	writeFile(t, dir, "main.idl", `
+#ifndef MAIN_IDL
+#define MAIN_IDL
+
+#include "types.idl"
+
+struct Pixel {
+	long x;
+	long y;
+};
+
+#endif
+`)
+
+	r := NewIncludeResolver(nil)
+	f, err := r.ResolveFile(filepath.Join(dir, "main.idl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(f.Definitions) != 2 {
+		t.Fatalf("expected 2 definitions, got %d", len(f.Definitions))
+	}
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644)

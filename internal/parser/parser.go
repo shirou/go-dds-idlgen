@@ -62,7 +62,7 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 
 	for p.tok.Kind != TokenEOF {
 		if p.tok.Kind == TokenHash {
-			inc := p.parseInclude()
+			inc := p.parseDirective()
 			if inc != "" {
 				file.Includes = append(file.Includes, inc)
 			}
@@ -88,12 +88,33 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 	return file, nil
 }
 
-func (p *Parser) parseInclude() string {
+func (p *Parser) parseDirective() string {
 	p.expect(TokenHash) // consume #
-	if p.tok.Kind != TokenIdent || p.tok.Value != "include" {
-		p.addError("expected 'include' after '#'")
+	if p.tok.Kind != TokenIdent {
+		p.addError("expected directive name after '#'")
 		return ""
 	}
+
+	switch p.tok.Value {
+	case "include":
+		return p.parseIncludeDirective()
+	case "ifndef", "define":
+		p.next() // consume directive name
+		if p.tok.Kind == TokenIdent {
+			p.next() // consume macro name
+		}
+		return ""
+	case "endif":
+		p.next() // consume "endif"
+		return ""
+	default:
+		p.addError(fmt.Sprintf("unsupported preprocessor directive #%s", p.tok.Value))
+		p.next()
+		return ""
+	}
+}
+
+func (p *Parser) parseIncludeDirective() string {
 	p.next() // consume "include"
 
 	// Handle both "file.idl" and <file.idl>.
