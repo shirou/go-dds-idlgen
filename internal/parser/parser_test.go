@@ -353,6 +353,49 @@ struct OK {
 	}
 }
 
+func TestParseSkippedUnionSwitch(t *testing.T) {
+	src := `
+enum MessageFilterTypeEnum {
+    ALLFILTER_D,
+    DECIMATESTRUCTUREFILTER_D,
+    SENDONLYIFCHANGEDFILTER_D
+};
+
+union MessageFilterTypeUnion switch (MessageFilterTypeEnum)
+{
+    case ALLFILTER_D:
+        long AllFilterVariant;
+    case DECIMATESTRUCTUREFILTER_D:
+        long DecimateStructureFilterVariant;
+    case SENDONLYIFCHANGEDFILTER_D:
+        long SendOnlyIfChangedFilterVariant;
+};
+
+struct MessageFilterType {
+    long x;
+};
+`
+	p := NewParser("test.idl", []byte(src))
+	file, err := p.ParseFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Definitions) != 3 {
+		t.Fatalf("expected 3 definitions, got %d", len(file.Definitions))
+	}
+	skipped, ok := file.Definitions[1].(*ast.SkippedDecl)
+	if !ok {
+		t.Fatalf("expected SkippedDecl, got %T", file.Definitions[1])
+	}
+	if skipped.Kind != "union" || skipped.Name != "MessageFilterTypeUnion" {
+		t.Fatalf("unexpected skipped: %+v", skipped)
+	}
+	_, ok = file.Definitions[2].(*ast.Struct)
+	if !ok {
+		t.Fatalf("expected Struct after skipped union, got %T", file.Definitions[2])
+	}
+}
+
 func TestParseStringBounded(t *testing.T) {
 	src := `
 struct S {

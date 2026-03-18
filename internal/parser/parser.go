@@ -390,14 +390,13 @@ func (p *Parser) parseSkipped() *ast.SkippedDecl {
 		p.next()
 	}
 
-	// Skip until we find a braced block and consume it, or until semicolon.
+	// Skip tokens until we find a braced block or semicolon.
+	// Some constructs (e.g. union ... switch (...)) have tokens before the brace.
+	for p.tok.Kind != TokenLBrace && p.tok.Kind != TokenSemicolon && p.tok.Kind != TokenEOF {
+		p.next()
+	}
 	if p.tok.Kind == TokenLBrace {
 		p.skipBracedBlock()
-	} else {
-		// Skip to next semicolon.
-		for p.tok.Kind != TokenSemicolon && p.tok.Kind != TokenEOF {
-			p.next()
-		}
 	}
 	p.accept(TokenSemicolon)
 
