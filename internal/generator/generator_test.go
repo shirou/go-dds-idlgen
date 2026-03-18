@@ -169,6 +169,58 @@ func TestGenerate_Enum(t *testing.T) {
 	}
 }
 
+func TestGenerate_EnumMixedValues(t *testing.T) {
+	g, err := New(Config{OutputDir: "/tmp/test"})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	val0 := int64(0)
+	val5 := int64(5)
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			&ast.Enum{
+				Name: "Status",
+				Values: []ast.EnumValue{
+					{Name: "OK", Value: &val0},
+					{Name: "WARN"},
+					{Name: "ERROR", Value: &val5},
+					{Name: "FATAL"},
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	data, ok := result["."]
+	if !ok {
+		t.Fatal("expected output for '.' package path")
+	}
+
+	src := string(data)
+	// Verify that values after an explicit value are computed correctly
+	// (not using iota which would give wrong values).
+	// go/format may add alignment spaces, so check key fragments.
+	for _, want := range []struct {
+		name string
+		val  string
+	}{
+		{"StatusOK", "= 0"},
+		{"StatusWARN", "= 1"},
+		{"StatusERROR", "= 5"},
+		{"StatusFATAL", "= 6"},
+	} {
+		if !strings.Contains(src, want.name) || !strings.Contains(src, want.val) {
+			t.Errorf("expected '%s ... %s' in output:\n%s", want.name, want.val, src)
+		}
+	}
+}
+
 func TestGenerate_Typedef(t *testing.T) {
 	g, err := New(Config{OutputDir: "/tmp/test"})
 	if err != nil {

@@ -75,10 +75,9 @@ func TestGoType_NamedType(t *testing.T) {
 	}
 }
 
-func TestGoType_Nil(t *testing.T) {
-	// A nil TypeRef should not panic; the default case returns "interface{}"
-	type fakeType struct{}
-	// We can't easily test nil interface, but test that unknown types return interface{}
+func TestGoType_Unknown(t *testing.T) {
+	// Unknown TypeRef implementations should return "any" from the default case.
+	// We cannot easily construct a nil interface, so this test documents the expectation.
 }
 
 func TestPascalCase(t *testing.T) {
@@ -126,6 +125,9 @@ func TestSnakeCase(t *testing.T) {
 		{"MyStruct", "my_struct"},
 		{"simple", "simple"},
 		{"", ""},
+		{"HTTPServer", "http_server"},
+		{"getHTTPResponse", "get_http_response"},
+		{"sensor_data", "sensor_data"},
 	}
 	for _, tt := range tests {
 		got := snakeCase(tt.input)
@@ -403,5 +405,38 @@ func TestArrayElemTypeAndSize(t *testing.T) {
 	}
 	if got := arraySize(&ast.BasicType{Name: "int32"}); got != 0 {
 		t.Errorf("arraySize(non-arr) = %d, want 0", got)
+	}
+}
+
+func TestEnumComputedValue(t *testing.T) {
+	val0 := int64(0)
+	val5 := int64(5)
+	values := []ast.EnumValue{
+		{Name: "RED", Value: &val0},
+		{Name: "GREEN"},          // should be 1
+		{Name: "BLUE", Value: &val5},
+		{Name: "YELLOW"},         // should be 6
+		{Name: "PURPLE"},         // should be 7
+	}
+
+	want := []int64{0, 1, 5, 6, 7}
+	for i, w := range want {
+		got := enumComputedValue(values, i)
+		if got != w {
+			t.Errorf("enumComputedValue(values, %d) = %d, want %d", i, got, w)
+		}
+	}
+
+	// All implicit values starting from 0
+	implicitValues := []ast.EnumValue{
+		{Name: "A"},
+		{Name: "B"},
+		{Name: "C"},
+	}
+	for i, w := range []int64{0, 1, 2} {
+		got := enumComputedValue(implicitValues, i)
+		if got != w {
+			t.Errorf("enumComputedValue(implicit, %d) = %d, want %d", i, got, w)
+		}
 	}
 }

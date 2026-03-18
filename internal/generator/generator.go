@@ -80,6 +80,7 @@ func New(cfg Config) (*Generator, error) {
 		"seqElemTypeRef":    seqElemTypeRef,
 		"arrElemTypeRef":    arrElemTypeRef,
 		"enumValueInt":      enumValueInt,
+		"enumComputedValue": enumComputedValue,
 		"hasExplicitValue":  hasExplicitValue,
 		"fieldMemberID":     fieldMemberID,
 		"cdrSerializedSize": cdrSerializedSize,
@@ -225,7 +226,7 @@ func (g *Generator) scanExistingDecls(relPath string, seen map[string]bool) {
 }
 
 func deduplicateSlice[T any](items []T, seen map[string]bool, name func(T) string) []T {
-	result := items[:0]
+	result := make([]T, 0, len(items))
 	for _, item := range items {
 		n := name(item)
 		if seen[n] {

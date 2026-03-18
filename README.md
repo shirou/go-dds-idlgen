@@ -50,7 +50,7 @@ Run the generator:
 go-dds-idlgen -o gen/ sensor.idl
 ```
 
-This produces `gen/sensor/types_gen.go`:
+This produces `gen/sensor/sensor.go`:
 
 ```go
 package sensor

@@ -100,13 +100,6 @@ func NewLexer(src []byte, filename string) *Lexer {
 	}
 }
 
-func (l *Lexer) peek() byte {
-	if l.pos >= len(l.src) {
-		return 0
-	}
-	return l.src[l.pos]
-}
-
 func (l *Lexer) advance() byte {
 	if l.pos >= len(l.src) {
 		return 0
@@ -394,22 +387,6 @@ func isIdentStart(ch byte) bool {
 
 func isIdentPart(ch byte) bool {
 	return isIdentStart(ch) || isDigit(ch)
-}
-
-// isKeyword reports whether ident is a recognized IDL keyword.
-func isKeyword(ident string) bool {
-	switch ident {
-	case "module", "struct", "enum", "typedef", "const",
-		"sequence", "string", "wstring",
-		"boolean", "octet", "char", "wchar",
-		"short", "unsigned", "long", "float", "double",
-		"int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
-		"TRUE", "FALSE", "include",
-		"interface", "union", "valuetype", "bitset", "bitmask", "annotation",
-		"map":
-		return true
-	}
-	return false
 }
 
 // ErrorAt formats a lexer error with file, line, and column information.

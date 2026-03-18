@@ -8,9 +8,6 @@ import (
 	"github.com/shirou/go-dds-idlgen/internal/ast"
 )
 
-// resolveUnderlying follows NamedType → Typedef chains to find the
-// underlying type. This is needed because typedef creates Go type aliases
-// that don't have their own methods (e.g., MarshalCDR).
 // resolveUnderlying follows NamedType → Typedef chains for primitive typedefs.
 // Compound typedefs (array, sequence) are generated as defined types with their
 // own MarshalCDR methods, so we stop at those.
@@ -133,19 +130,13 @@ func camelCase(s string) string {
 }
 
 // snakeCase converts PascalCase/camelCase to snake_case.
+// Handles consecutive uppercase letters correctly (e.g., "HTTPServer" -> "http_server").
 func snakeCase(s string) string {
-	var result []rune
-	for i, r := range s {
-		if unicode.IsUpper(r) {
-			if i > 0 {
-				result = append(result, '_')
-			}
-			result = append(result, unicode.ToLower(r))
-		} else {
-			result = append(result, r)
-		}
+	words := splitWords(s)
+	for i, w := range words {
+		words[i] = strings.ToLower(w)
 	}
-	return string(result)
+	return strings.Join(words, "_")
 }
 
 // splitWords splits a string into words by underscores and camelCase boundaries.
@@ -437,6 +428,24 @@ func enumValueInt(v ast.EnumValue) int64 {
 		return *v.Value
 	}
 	return -1
+}
+
+// enumComputedValue returns the effective integer value for the enum value at
+// the given index. Explicit values are used as-is; implicit values continue
+// incrementing from the previous value. This avoids mixing iota with explicit
+// values, which would produce incorrect constants.
+func enumComputedValue(values []ast.EnumValue, index int) int64 {
+	var next int64
+	for i := 0; i <= index; i++ {
+		if values[i].Value != nil {
+			next = *values[i].Value
+		}
+		if i == index {
+			return next
+		}
+		next++
+	}
+	return next
 }
 
 // hasExplicitValue reports whether an EnumValue has an explicit value.

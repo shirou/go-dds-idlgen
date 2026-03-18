@@ -29,10 +29,6 @@ func (p *Parser) next() {
 	p.tok = p.lexer.Next()
 }
 
-func (p *Parser) peek() Token {
-	return p.tok
-}
-
 func (p *Parser) accept(kind TokenKind) bool {
 	if p.tok.Kind == kind {
 		p.next()
