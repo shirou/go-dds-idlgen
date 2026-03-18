@@ -109,6 +109,10 @@ func (r *TypeResolver) buildScopeDefs(scope *Scope, defs []ast.Definition) {
 			scope.Types[d.Name] = d
 		case *ast.Typedef:
 			scope.Types[d.Name] = d
+		case *ast.SkippedDecl:
+			if d.Name != "" {
+				scope.Types[d.Name] = d
+			}
 		}
 	}
 }
