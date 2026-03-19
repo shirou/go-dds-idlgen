@@ -20,7 +20,27 @@ type SensorData struct {
 	Active      bool
 }
 
-func (s *SensorData) MarshalCDR(enc *cdr.Encoder) error {
+func (s *SensorData) CDRExtensibility() cdr.ExtensibilityKind {
+	return cdr.FINAL
+}
+
+func (s *SensorData) MarshalCDR() ([]byte, error) {
+	enc := cdr.NewEncoder(cdr.GetEncapsulationKind(s.CDRExtensibility()))
+	if err := s.EncodeCDR(enc); err != nil {
+		return nil, err
+	}
+	return enc.Bytes(), nil
+}
+
+func (s *SensorData) UnmarshalCDR(data []byte) error {
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		return err
+	}
+	return s.DecodeCDR(dec)
+}
+
+func (s *SensorData) EncodeCDR(enc *cdr.Encoder) error {
 	if err := enc.WriteInt32(s.SensorID); err != nil {
 		return err
 	}
@@ -39,7 +59,7 @@ func (s *SensorData) MarshalCDR(enc *cdr.Encoder) error {
 	return nil
 }
 
-func (s *SensorData) UnmarshalCDR(dec *cdr.Decoder) error {
+func (s *SensorData) DecodeCDR(dec *cdr.Decoder) error {
 	var err error
 	if s.SensorID, err = dec.ReadInt32(); err != nil {
 		return err
@@ -68,14 +88,13 @@ func TestRoundTrip_FinalStruct(t *testing.T) {
 		Active:      true,
 	}
 
-	enc := cdr.NewRawEncoder(binary.LittleEndian)
-	if err := original.MarshalCDR(enc); err != nil {
+	data, err := original.MarshalCDR()
+	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	dec := cdr.NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	var decoded SensorData
-	if err := decoded.UnmarshalCDR(dec); err != nil {
+	if err := decoded.UnmarshalCDR(data); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
@@ -103,7 +122,27 @@ type AppendableEvent struct {
 	Timestamp int32
 }
 
-func (s *AppendableEvent) MarshalCDR(enc *cdr.Encoder) error {
+func (s *AppendableEvent) CDRExtensibility() cdr.ExtensibilityKind {
+	return cdr.APPENDABLE
+}
+
+func (s *AppendableEvent) MarshalCDR() ([]byte, error) {
+	enc := cdr.NewEncoder(cdr.GetEncapsulationKind(s.CDRExtensibility()))
+	if err := s.EncodeCDR(enc); err != nil {
+		return nil, err
+	}
+	return enc.Bytes(), nil
+}
+
+func (s *AppendableEvent) UnmarshalCDR(data []byte) error {
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		return err
+	}
+	return s.DecodeCDR(dec)
+}
+
+func (s *AppendableEvent) EncodeCDR(enc *cdr.Encoder) error {
 	start := enc.BeginDHeader()
 	if err := enc.WriteUint32(s.EventID); err != nil {
 		return err
@@ -118,7 +157,7 @@ func (s *AppendableEvent) MarshalCDR(enc *cdr.Encoder) error {
 	return nil
 }
 
-func (s *AppendableEvent) UnmarshalCDR(dec *cdr.Decoder) error {
+func (s *AppendableEvent) DecodeCDR(dec *cdr.Decoder) error {
 	_, err := dec.ReadDHeader()
 	if err != nil {
 		return err
@@ -142,14 +181,13 @@ func TestRoundTrip_AppendableStruct(t *testing.T) {
 		Timestamp: 1710000000,
 	}
 
-	enc := cdr.NewRawEncoder(binary.LittleEndian)
-	if err := original.MarshalCDR(enc); err != nil {
+	data, err := original.MarshalCDR()
+	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	dec := cdr.NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	var decoded AppendableEvent
-	if err := decoded.UnmarshalCDR(dec); err != nil {
+	if err := decoded.UnmarshalCDR(data); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
@@ -164,7 +202,27 @@ type MutableMessage struct {
 	Content string
 }
 
-func (s *MutableMessage) MarshalCDR(enc *cdr.Encoder) error {
+func (s *MutableMessage) CDRExtensibility() cdr.ExtensibilityKind {
+	return cdr.MUTABLE
+}
+
+func (s *MutableMessage) MarshalCDR() ([]byte, error) {
+	enc := cdr.NewEncoder(cdr.GetEncapsulationKind(s.CDRExtensibility()))
+	if err := s.EncodeCDR(enc); err != nil {
+		return nil, err
+	}
+	return enc.Bytes(), nil
+}
+
+func (s *MutableMessage) UnmarshalCDR(data []byte) error {
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		return err
+	}
+	return s.DecodeCDR(dec)
+}
+
+func (s *MutableMessage) EncodeCDR(enc *cdr.Encoder) error {
 	// Field 0: MsgID (4 bytes, fixed size)
 	if err := enc.WriteEMHeader(true, 0, 4); err != nil {
 		return err
@@ -188,7 +246,7 @@ func (s *MutableMessage) MarshalCDR(enc *cdr.Encoder) error {
 	return nil
 }
 
-func (s *MutableMessage) UnmarshalCDR(dec *cdr.Decoder) error {
+func (s *MutableMessage) DecodeCDR(dec *cdr.Decoder) error {
 	for {
 		mu, lc, memberID, nextInt, err := dec.ReadEMHeader()
 		if err != nil {
@@ -246,14 +304,13 @@ func TestRoundTrip_MutableStruct(t *testing.T) {
 		Content: "Hello, DDS World!",
 	}
 
-	enc := cdr.NewRawEncoder(binary.LittleEndian)
-	if err := original.MarshalCDR(enc); err != nil {
+	data, err := original.MarshalCDR()
+	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	dec := cdr.NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	var decoded MutableMessage
-	if err := decoded.UnmarshalCDR(dec); err != nil {
+	if err := decoded.UnmarshalCDR(data); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
@@ -262,5 +319,30 @@ func TestRoundTrip_MutableStruct(t *testing.T) {
 	}
 	if decoded.Content != original.Content {
 		t.Errorf("Content: got %q, want %q", decoded.Content, original.Content)
+	}
+}
+
+// TestRoundTrip_RawEncoder tests raw encoder/decoder without encapsulation header.
+func TestRoundTrip_RawEncoder(t *testing.T) {
+	enc := cdr.NewRawEncoder(binary.LittleEndian)
+	original := SensorData{
+		SensorID:    42,
+		Temperature: 23.5,
+		Humidity:    65.2,
+		Location:    "test",
+		Active:      true,
+	}
+	if err := original.EncodeCDR(enc); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	dec := cdr.NewRawDecoder(enc.Bytes(), binary.LittleEndian)
+	var decoded SensorData
+	if err := decoded.DecodeCDR(dec); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if decoded.SensorID != original.SensorID {
+		t.Errorf("SensorID: got %d, want %d", decoded.SensorID, original.SensorID)
 	}
 }

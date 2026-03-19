@@ -86,6 +86,30 @@ func isNativeLE() bool {
 	return buf[0] == 0x02
 }
 
+// Marshaler is the interface implemented by types that can serialize
+// themselves into CDR format, including the encapsulation header.
+type Marshaler interface {
+	MarshalCDR() ([]byte, error)
+}
+
+// Unmarshaler is the interface implemented by types that can deserialize
+// themselves from CDR format, reading the encapsulation header automatically.
+type Unmarshaler interface {
+	UnmarshalCDR([]byte) error
+}
+
+// CDREncoder is the interface implemented by types that can encode
+// themselves into an existing Encoder. Used for nested type serialization.
+type CDREncoder interface {
+	EncodeCDR(enc *Encoder) error
+}
+
+// CDRDecoder is the interface implemented by types that can decode
+// themselves from an existing Decoder. Used for nested type deserialization.
+type CDRDecoder interface {
+	DecodeCDR(dec *Decoder) error
+}
+
 // MemberID is a 28-bit identifier for a member in PL_CDR2 (MUTABLE) encoding.
 type MemberID = uint32
 

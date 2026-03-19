@@ -7,14 +7,14 @@ type {{pascalCase .Name}} = {{goType .Type}}
 // {{pascalCase .Name}} is a defined type for the IDL typedef {{.Name}}.
 type {{pascalCase .Name}} {{goType .Type}}
 
-func (s *{{pascalCase .Name}}) MarshalCDR(enc *cdr.Encoder) error {
+func (s *{{pascalCase .Name}}) EncodeCDR(enc *cdr.Encoder) error {
 	for _, elem := range s {
 {{- if isPrimitive (arrElemTypeRef .Type)}}
 		if err := enc.{{cdrWriteFunc (arrElemTypeRef .Type)}}(elem); err != nil {
 			return err
 		}
 {{- else}}
-		if err := elem.MarshalCDR(enc); err != nil {
+		if err := elem.EncodeCDR(enc); err != nil {
 			return err
 		}
 {{- end}}
@@ -22,7 +22,7 @@ func (s *{{pascalCase .Name}}) MarshalCDR(enc *cdr.Encoder) error {
 	return nil
 }
 
-func (s *{{pascalCase .Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
+func (s *{{pascalCase .Name}}) DecodeCDR(dec *cdr.Decoder) error {
 	for i := 0; i < {{arraySize .Type}}; i++ {
 {{- if isPrimitive (arrElemTypeRef .Type)}}
 		v, err := dec.{{cdrReadFunc (arrElemTypeRef .Type)}}()
@@ -31,7 +31,7 @@ func (s *{{pascalCase .Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 		}
 		s[i] = v
 {{- else}}
-		if err := s[i].UnmarshalCDR(dec); err != nil {
+		if err := s[i].DecodeCDR(dec); err != nil {
 			return err
 		}
 {{- end}}

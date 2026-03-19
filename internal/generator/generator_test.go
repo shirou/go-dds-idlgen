@@ -72,12 +72,11 @@ func TestGenerate_SimpleStruct(t *testing.T) {
 	if !strings.Contains(src, "Label") {
 		t.Errorf("expected field Label in output:\n%s", src)
 	}
-	// Check marshal method
-	if !strings.Contains(src, "MarshalCDR") {
-		t.Errorf("expected MarshalCDR method in output:\n%s", src)
-	}
-	if !strings.Contains(src, "UnmarshalCDR") {
-		t.Errorf("expected UnmarshalCDR method in output:\n%s", src)
+	// Check marshal methods
+	for _, method := range []string{"MarshalCDR", "UnmarshalCDR", "EncodeCDR", "DecodeCDR", "CDRExtensibility"} {
+		if !strings.Contains(src, method) {
+			t.Errorf("expected %s method in output:\n%s", method, src)
+		}
 	}
 }
 

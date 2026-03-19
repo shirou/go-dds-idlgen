@@ -451,8 +451,8 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 	for _, sk := range unit.Skipped {
 		name := pascalCase(sk.Name)
 		fmt.Fprintf(&buf, "\n// %s is a placeholder for IDL %s (not fully supported).\ntype %s struct{}\n", name, sk.Kind, name)
-		fmt.Fprintf(&buf, "\nfunc (s *%s) MarshalCDR(enc *cdr.Encoder) error { return nil }\n", name)
-		fmt.Fprintf(&buf, "func (s *%s) UnmarshalCDR(dec *cdr.Decoder) error { return nil }\n", name)
+		fmt.Fprintf(&buf, "\nfunc (s *%s) EncodeCDR(enc *cdr.Encoder) error { return nil }\n", name)
+		fmt.Fprintf(&buf, "func (s *%s) DecodeCDR(dec *cdr.Decoder) error { return nil }\n", name)
 	}
 
 	// Render structs

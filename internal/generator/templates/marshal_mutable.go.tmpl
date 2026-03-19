@@ -1,6 +1,29 @@
 
-// MarshalCDR serializes {{pascalCase .Struct.Name}} using XCDR2 MUTABLE encoding (PL_CDR2).
-func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
+// CDRExtensibility returns the extensibility kind of {{pascalCase .Struct.Name}}.
+func (s *{{pascalCase .Struct.Name}}) CDRExtensibility() cdr.ExtensibilityKind {
+	return cdr.MUTABLE
+}
+
+// MarshalCDR serializes {{pascalCase .Struct.Name}} into CDR format with encapsulation header.
+func (s *{{pascalCase .Struct.Name}}) MarshalCDR() ([]byte, error) {
+	enc := cdr.NewEncoder(cdr.GetEncapsulationKind(s.CDRExtensibility()))
+	if err := s.EncodeCDR(enc); err != nil {
+		return nil, err
+	}
+	return enc.Bytes(), nil
+}
+
+// UnmarshalCDR deserializes {{pascalCase .Struct.Name}} from CDR format, reading the encapsulation header.
+func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(data []byte) error {
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		return err
+	}
+	return s.DecodeCDR(dec)
+}
+
+// EncodeCDR serializes {{pascalCase .Struct.Name}} using XCDR2 MUTABLE encoding (PL_CDR2).
+func (s *{{pascalCase .Struct.Name}}) EncodeCDR(enc *cdr.Encoder) error {
 	dh := enc.BeginDHeader()
 {{- range $i, $f := .Struct.Fields}}
 {{- if isOptional $f}}
@@ -43,7 +66,7 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 				return err
 			}
 {{- else}}
-			if err := elem.MarshalCDR(subEnc); err != nil {
+			if err := elem.EncodeCDR(subEnc); err != nil {
 				return err
 			}
 {{- end}}
@@ -55,18 +78,18 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 				return err
 			}
 {{- else}}
-			if err := elem.MarshalCDR(subEnc); err != nil {
+			if err := elem.EncodeCDR(subEnc); err != nil {
 				return err
 			}
 {{- end}}
 		}
 {{- else}}
 {{- if isOptional $f}}
-		if err := s.{{pascalCase $f.Name}}.MarshalCDR(subEnc); err != nil {
+		if err := s.{{pascalCase $f.Name}}.EncodeCDR(subEnc); err != nil {
 			return err
 		}
 {{- else}}
-		if err := s.{{pascalCase $f.Name}}.MarshalCDR(subEnc); err != nil {
+		if err := s.{{pascalCase $f.Name}}.EncodeCDR(subEnc); err != nil {
 			return err
 		}
 {{- end}}
@@ -91,8 +114,8 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 	return nil
 }
 
-// UnmarshalCDR deserializes {{pascalCase .Struct.Name}} using XCDR2 MUTABLE encoding (PL_CDR2).
-func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
+// DecodeCDR deserializes {{pascalCase .Struct.Name}} using XCDR2 MUTABLE encoding (PL_CDR2).
+func (s *{{pascalCase .Struct.Name}}) DecodeCDR(dec *cdr.Decoder) error {
 	_, err := dec.ReadDHeader()
 	if err != nil {
 		return err
@@ -161,7 +184,7 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 					}
 					s.{{pascalCase $f.Name}}[j] = v
 {{- else}}
-					if err := s.{{pascalCase $f.Name}}[j].UnmarshalCDR(dec); err != nil {
+					if err := s.{{pascalCase $f.Name}}[j].DecodeCDR(dec); err != nil {
 						return err
 					}
 {{- end}}
@@ -177,7 +200,7 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 					}
 					s.{{pascalCase $f.Name}}[j] = v
 {{- else}}
-					if err := s.{{pascalCase $f.Name}}[j].UnmarshalCDR(dec); err != nil {
+					if err := s.{{pascalCase $f.Name}}[j].DecodeCDR(dec); err != nil {
 						return err
 					}
 {{- end}}
@@ -187,13 +210,13 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 {{- if isOptional $f}}
 			{
 				var v {{goType $f.Type}}
-				if err := v.UnmarshalCDR(dec); err != nil {
+				if err := v.DecodeCDR(dec); err != nil {
 					return err
 				}
 				s.{{pascalCase $f.Name}} = &v
 			}
 {{- else}}
-			if err := s.{{pascalCase $f.Name}}.UnmarshalCDR(dec); err != nil {
+			if err := s.{{pascalCase $f.Name}}.DecodeCDR(dec); err != nil {
 				return err
 			}
 {{- end}}

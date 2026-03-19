@@ -1,6 +1,29 @@
 
-// MarshalCDR serializes {{pascalCase .Struct.Name}} using XCDR2 FINAL encoding.
-func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
+// CDRExtensibility returns the extensibility kind of {{pascalCase .Struct.Name}}.
+func (s *{{pascalCase .Struct.Name}}) CDRExtensibility() cdr.ExtensibilityKind {
+	return cdr.FINAL
+}
+
+// MarshalCDR serializes {{pascalCase .Struct.Name}} into CDR format with encapsulation header.
+func (s *{{pascalCase .Struct.Name}}) MarshalCDR() ([]byte, error) {
+	enc := cdr.NewEncoder(cdr.GetEncapsulationKind(s.CDRExtensibility()))
+	if err := s.EncodeCDR(enc); err != nil {
+		return nil, err
+	}
+	return enc.Bytes(), nil
+}
+
+// UnmarshalCDR deserializes {{pascalCase .Struct.Name}} from CDR format, reading the encapsulation header.
+func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(data []byte) error {
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		return err
+	}
+	return s.DecodeCDR(dec)
+}
+
+// EncodeCDR serializes {{pascalCase .Struct.Name}} using XCDR2 FINAL encoding.
+func (s *{{pascalCase .Struct.Name}}) EncodeCDR(enc *cdr.Encoder) error {
 {{- range .Struct.Fields}}
 {{- if isOptional .}}
 	if err := enc.WriteBool(s.{{pascalCase .Name}} != nil); err != nil {
@@ -21,7 +44,7 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 				return err
 			}
 {{- else}}
-			if err := elem.MarshalCDR(enc); err != nil {
+			if err := elem.EncodeCDR(enc); err != nil {
 				return err
 			}
 {{- end}}
@@ -33,13 +56,13 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 				return err
 			}
 {{- else}}
-			if err := elem.MarshalCDR(enc); err != nil {
+			if err := elem.EncodeCDR(enc); err != nil {
 				return err
 			}
 {{- end}}
 		}
 {{- else}}
-		if err := s.{{pascalCase .Name}}.MarshalCDR(enc); err != nil {
+		if err := s.{{pascalCase .Name}}.EncodeCDR(enc); err != nil {
 			return err
 		}
 {{- end}}
@@ -59,7 +82,7 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 			return err
 		}
 {{- else}}
-		if err := elem.MarshalCDR(enc); err != nil {
+		if err := elem.EncodeCDR(enc); err != nil {
 			return err
 		}
 {{- end}}
@@ -71,13 +94,13 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 			return err
 		}
 {{- else}}
-		if err := elem.MarshalCDR(enc); err != nil {
+		if err := elem.EncodeCDR(enc); err != nil {
 			return err
 		}
 {{- end}}
 	}
 {{- else}}
-	if err := s.{{pascalCase .Name}}.MarshalCDR(enc); err != nil {
+	if err := s.{{pascalCase .Name}}.EncodeCDR(enc); err != nil {
 		return err
 	}
 {{- end}}
@@ -86,8 +109,8 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 	return nil
 }
 
-// UnmarshalCDR deserializes {{pascalCase .Struct.Name}} using XCDR2 FINAL encoding.
-func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
+// DecodeCDR deserializes {{pascalCase .Struct.Name}} using XCDR2 FINAL encoding.
+func (s *{{pascalCase .Struct.Name}}) DecodeCDR(dec *cdr.Decoder) error {
 {{- range .Struct.Fields}}
 {{- if isOptional .}}
 	{
@@ -116,7 +139,7 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 				}
 				seq[i] = v
 {{- else}}
-				if err := seq[i].UnmarshalCDR(dec); err != nil {
+				if err := seq[i].DecodeCDR(dec); err != nil {
 					return err
 				}
 {{- end}}
@@ -132,7 +155,7 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 				}
 				arr[i] = v
 {{- else}}
-				if err := arr[i].UnmarshalCDR(dec); err != nil {
+				if err := arr[i].DecodeCDR(dec); err != nil {
 					return err
 				}
 {{- end}}
@@ -140,7 +163,7 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 			s.{{pascalCase .Name}} = &arr
 {{- else}}
 			var v {{goType .Type}}
-			if err := v.UnmarshalCDR(dec); err != nil {
+			if err := v.DecodeCDR(dec); err != nil {
 				return err
 			}
 			s.{{pascalCase .Name}} = &v
@@ -171,7 +194,7 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 			}
 			s.{{pascalCase .Name}}[i] = v
 {{- else}}
-			if err := s.{{pascalCase .Name}}[i].UnmarshalCDR(dec); err != nil {
+			if err := s.{{pascalCase .Name}}[i].DecodeCDR(dec); err != nil {
 				return err
 			}
 {{- end}}
@@ -187,14 +210,14 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(dec *cdr.Decoder) error {
 			}
 			s.{{pascalCase .Name}}[i] = v
 {{- else}}
-			if err := s.{{pascalCase .Name}}[i].UnmarshalCDR(dec); err != nil {
+			if err := s.{{pascalCase .Name}}[i].DecodeCDR(dec); err != nil {
 				return err
 			}
 {{- end}}
 		}
 	}
 {{- else}}
-	if err := s.{{pascalCase .Name}}.UnmarshalCDR(dec); err != nil {
+	if err := s.{{pascalCase .Name}}.DecodeCDR(dec); err != nil {
 		return err
 	}
 {{- end}}

@@ -77,7 +77,6 @@ package main
 import (
     "fmt"
 
-    "github.com/shirou/go-dds-idlgen/cdr"
     "your/project/gen/sensor"
 )
 
@@ -90,13 +89,11 @@ func main() {
     }
 
     // Serialize (encapsulation header is written automatically)
-    enc := cdr.NewEncoder(cdr.GetEncapsulationKind(cdr.FINAL))
-    _ = data.MarshalCDR(enc)
+    data, _ := data.MarshalCDR()
 
     // Deserialize (byte order is read from the encapsulation header)
-    dec, _ := cdr.NewDecoder(enc.Bytes())
     var result sensor.SensorData
-    _ = result.UnmarshalCDR(dec)
+    _ = result.UnmarshalCDR(data)
 
     fmt.Printf("%+v\n", result)
 }
