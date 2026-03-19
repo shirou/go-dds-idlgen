@@ -32,25 +32,24 @@ const (
 type EncapsulationKind uint16
 
 const (
-	// CDR2_LE is XCDR2 plain CDR little-endian (FINAL types).
-	CDR2_LE EncapsulationKind = 0x0006
 	// CDR2_BE is XCDR2 plain CDR big-endian (FINAL types).
-	CDR2_BE EncapsulationKind = 0x0007
-	// DELIMITED_CDR2_LE is XCDR2 delimited CDR little-endian (APPENDABLE types).
-	DELIMITED_CDR2_LE EncapsulationKind = 0x0008
+	CDR2_BE EncapsulationKind = 0x0006
+	// CDR2_LE is XCDR2 plain CDR little-endian (FINAL types).
+	CDR2_LE EncapsulationKind = 0x0007
 	// DELIMITED_CDR2_BE is XCDR2 delimited CDR big-endian (APPENDABLE types).
-	DELIMITED_CDR2_BE EncapsulationKind = 0x0009
-	// PL_CDR2_LE is XCDR2 parameter-list CDR little-endian (MUTABLE types).
-	PL_CDR2_LE EncapsulationKind = 0x000a
+	DELIMITED_CDR2_BE EncapsulationKind = 0x0008
+	// DELIMITED_CDR2_LE is XCDR2 delimited CDR little-endian (APPENDABLE types).
+	DELIMITED_CDR2_LE EncapsulationKind = 0x0009
 	// PL_CDR2_BE is XCDR2 parameter-list CDR big-endian (MUTABLE types).
-	PL_CDR2_BE EncapsulationKind = 0x000b
+	PL_CDR2_BE EncapsulationKind = 0x000a
+	// PL_CDR2_LE is XCDR2 parameter-list CDR little-endian (MUTABLE types).
+	PL_CDR2_LE EncapsulationKind = 0x000b
 )
 
 // ByteOrder returns the byte order implied by this encapsulation kind.
-// LE variants (even values) return binary.LittleEndian; BE variants (odd
-// values) return binary.BigEndian.
+// Per the DDS-RTPS spec, odd values are LE and even values are BE.
 func (k EncapsulationKind) ByteOrder() binary.ByteOrder {
-	if k&1 == 0 {
+	if k&1 == 1 {
 		return binary.LittleEndian
 	}
 	return binary.BigEndian
@@ -112,7 +111,3 @@ type CDRDecoder interface {
 
 // MemberID is a 28-bit identifier for a member in PL_CDR2 (MUTABLE) encoding.
 type MemberID = uint32
-
-// PLCDRSentinelHeader is the raw 32-bit EMHEADER value that marks the end
-// of a PL_CDR2 member list.
-const PLCDRSentinelHeader uint32 = 0x7FFF0002

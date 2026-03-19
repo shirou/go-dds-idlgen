@@ -223,6 +223,7 @@ func (s *MutableMessage) UnmarshalCDR(data []byte) error {
 }
 
 func (s *MutableMessage) EncodeCDR(enc *cdr.Encoder) error {
+	dh := enc.BeginDHeader()
 	// Field 0: MsgID (4 bytes, fixed size)
 	if err := enc.WriteEMHeader(true, 0, 4); err != nil {
 		return err
@@ -239,23 +240,20 @@ func (s *MutableMessage) EncodeCDR(enc *cdr.Encoder) error {
 	if err := enc.WriteString(s.Content); err != nil {
 		return err
 	}
-	// Sentinel
-	if err := enc.WritePLCDRSentinel(); err != nil {
-		return err
-	}
+	enc.FinishDHeader(dh)
 	return nil
 }
 
 func (s *MutableMessage) DecodeCDR(dec *cdr.Decoder) error {
-	for {
-		mu, lc, memberID, nextInt, err := dec.ReadEMHeader()
+	dsize, err := dec.ReadDHeader()
+	if err != nil {
+		return err
+	}
+	endPos := dec.Pos() + int(dsize)
+	for dec.Pos() < endPos {
+		_, lc, memberID, nextInt, err := dec.ReadEMHeader()
 		if err != nil {
 			return err
-		}
-		_ = mu
-
-		if lc == 7 {
-			break // sentinel
 		}
 
 		// Determine field size from LC
@@ -272,9 +270,11 @@ func (s *MutableMessage) DecodeCDR(dec *cdr.Decoder) error {
 		case 4:
 			fieldSize = nextInt
 		case 5:
-			fieldSize = nextInt * 4
+			fieldSize = 4 + nextInt
 		case 6:
-			fieldSize = nextInt * 8
+			fieldSize = 4 + nextInt*4
+		case 7:
+			fieldSize = 4 + nextInt*8
 		}
 
 		switch memberID {

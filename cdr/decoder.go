@@ -199,25 +199,17 @@ func (d *Decoder) ReadDHeader() (uint32, error) {
 // ReadEMHeader reads an EMHEADER (and optional NEXTINT) used by MUTABLE
 // types. It returns the must-understand flag, the length code, the member
 // ID, and the NEXTINT value (zero when LC < 4).
-//
-// If the raw header equals PLCDRSentinelHeader the function returns
-// immediately with the sentinel member ID and LC=7.
 func (d *Decoder) ReadEMHeader() (mustUnderstand bool, lc uint8, memberID uint32, nextInt uint32, err error) {
 	raw, err := d.ReadUint32()
 	if err != nil {
 		return false, 0, 0, 0, fmt.Errorf("cdr: reading EMHEADER: %w", err)
 	}
 
-	if raw == PLCDRSentinelHeader {
-		// Sentinel: M=0, LC=7, memberID carries the sentinel pattern.
-		return false, 7, raw & 0x0FFFFFFF, 0, nil
-	}
-
 	mustUnderstand = (raw >> 31) != 0
 	lc = uint8((raw >> 28) & 0x7)
 	memberID = raw & 0x0FFFFFFF
 
-	if lc >= 4 && lc <= 6 {
+	if lc >= 4 {
 		nextInt, err = d.ReadUint32()
 		if err != nil {
 			return false, 0, 0, 0, fmt.Errorf("cdr: reading NEXTINT for EMHEADER: %w", err)
@@ -225,12 +217,6 @@ func (d *Decoder) ReadEMHeader() (mustUnderstand bool, lc uint8, memberID uint32
 	}
 
 	return mustUnderstand, lc, memberID, nextInt, nil
-}
-
-// IsSentinel reports whether the given raw EMHEADER value is the PL_CDR2
-// sentinel that terminates a mutable member list.
-func IsSentinel(rawHeader uint32) bool {
-	return rawHeader == PLCDRSentinelHeader
 }
 
 // Skip advances the read position by n bytes. It returns an error if

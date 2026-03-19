@@ -370,8 +370,8 @@ func TestGenerate_MutableStruct(t *testing.T) {
 	if !strings.Contains(src, "WriteEMHeader") {
 		t.Errorf("expected WriteEMHeader in MUTABLE output:\n%s", src)
 	}
-	if !strings.Contains(src, "WritePLCDRSentinel") {
-		t.Errorf("expected WritePLCDRSentinel in MUTABLE output:\n%s", src)
+	if !strings.Contains(src, "FinishDHeader") {
+		t.Errorf("expected FinishDHeader in MUTABLE output:\n%s", src)
 	}
 	if !strings.Contains(src, "ReadEMHeader") {
 		t.Errorf("expected ReadEMHeader in MUTABLE output:\n%s", src)

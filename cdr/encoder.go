@@ -196,7 +196,7 @@ func (e *Encoder) FinishDHeader(start int) {
 //
 //	0 = 1 byte, 1 = 2 bytes, 2 = 4 bytes, 3 = 8 bytes
 //	4 = NEXTINT (a following uint32 holds the actual size)
-//	5 = NEXTINT * 4,  6 = NEXTINT * 8,  7 = reserved / sentinel
+//	5 = 4 + NEXTINT,  6 = 4 + NEXTINT * 4,  7 = 4 + NEXTINT * 8
 //
 // If the data size matches one of the fixed LC values (1, 2, 4, 8), the
 // compact form is used. Otherwise LC=4 is used with an explicit NEXTINT.
@@ -235,12 +235,6 @@ func (e *Encoder) WriteEMHeader(mustUnderstand bool, memberID uint32, dataSize i
 	}
 
 	return nil
-}
-
-// WritePLCDRSentinel writes the PL_CDR2 sentinel EMHEADER that marks the
-// end of a mutable member list.
-func (e *Encoder) WritePLCDRSentinel() error {
-	return e.WriteUint32(PLCDRSentinelHeader)
 }
 
 // ByteOrder returns the byte order used by this encoder.

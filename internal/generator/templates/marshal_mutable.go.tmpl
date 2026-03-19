@@ -107,26 +107,21 @@ func (s *{{pascalCase .Struct.Name}}) EncodeCDR(enc *cdr.Encoder) error {
 	}
 {{- end}}
 {{- end}}
-	if err := enc.WritePLCDRSentinel(); err != nil {
-		return err
-	}
 	enc.FinishDHeader(dh)
 	return nil
 }
 
 // DecodeCDR deserializes {{pascalCase .Struct.Name}} using XCDR2 MUTABLE encoding (PL_CDR2).
 func (s *{{pascalCase .Struct.Name}}) DecodeCDR(dec *cdr.Decoder) error {
-	_, err := dec.ReadDHeader()
+	dsize, err := dec.ReadDHeader()
 	if err != nil {
 		return err
 	}
-	for {
+	endPos := dec.Pos() + int(dsize)
+	for dec.Pos() < endPos {
 		_, lc, memberID, nextInt, err := dec.ReadEMHeader()
 		if err != nil {
 			return err
-		}
-		if lc == 7 {
-			break // sentinel
 		}
 		// Determine field size from LC for skipping unknown fields.
 		var fieldSize uint32
@@ -142,9 +137,11 @@ func (s *{{pascalCase .Struct.Name}}) DecodeCDR(dec *cdr.Decoder) error {
 		case 4:
 			fieldSize = nextInt
 		case 5:
-			fieldSize = nextInt * 4
+			fieldSize = 4 + nextInt
 		case 6:
-			fieldSize = nextInt * 8
+			fieldSize = 4 + nextInt * 4
+		case 7:
+			fieldSize = 4 + nextInt * 8
 		}
 		switch memberID {
 {{- range $i, $f := .Struct.Fields}}

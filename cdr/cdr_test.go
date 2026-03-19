@@ -298,20 +298,6 @@ func TestEMHeaderMustUnderstand(t *testing.T) {
 	}
 }
 
-func TestPLCDRSentinelRoundTrip(t *testing.T) {
-	enc := encoderLE()
-	_ = enc.WritePLCDRSentinel()
-
-	data := enc.Bytes()
-	raw := binary.LittleEndian.Uint32(data)
-	if raw != PLCDRSentinelHeader {
-		t.Fatalf("sentinel raw = %#08x, want %#08x", raw, PLCDRSentinelHeader)
-	}
-	if !IsSentinel(raw) {
-		t.Error("IsSentinel should return true for sentinel header")
-	}
-}
-
 // ---------- edge cases ----------
 
 func TestEmptyString(t *testing.T) {
@@ -432,9 +418,9 @@ func TestNewEncoderWritesHeader(t *testing.T) {
 	if len(data) != 8 {
 		t.Fatalf("expected 8 bytes, got %d", len(data))
 	}
-	// Header: kind=0x0006 big-endian, options=0x0000
-	if data[0] != 0x00 || data[1] != 0x06 || data[2] != 0x00 || data[3] != 0x00 {
-		t.Errorf("header = %x, want [00 06 00 00]", data[:4])
+	// Header: kind=0x0007 (CDR2_LE) big-endian, options=0x0000
+	if data[0] != 0x00 || data[1] != 0x07 || data[2] != 0x00 || data[3] != 0x00 {
+		t.Errorf("header = %x, want [00 07 00 00]", data[:4])
 	}
 	// Payload in LE
 	v := binary.LittleEndian.Uint32(data[4:8])
@@ -448,8 +434,8 @@ func TestNewEncoderBEHeader(t *testing.T) {
 	_ = enc.WriteUint32(0x12345678)
 
 	data := enc.Bytes()
-	if data[0] != 0x00 || data[1] != 0x07 {
-		t.Errorf("header kind = %x %x, want 00 07", data[0], data[1])
+	if data[0] != 0x00 || data[1] != 0x06 {
+		t.Errorf("header kind = %x %x, want 00 06", data[0], data[1])
 	}
 	v := binary.BigEndian.Uint32(data[4:8])
 	if v != 0x12345678 {
