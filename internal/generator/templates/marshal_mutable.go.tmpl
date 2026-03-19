@@ -22,7 +22,7 @@ func (s *{{pascalCase .Struct.Name}}) MarshalCDR(enc *cdr.Encoder) error {
 {{- end}}
 {{- else}}
 	{
-		subEnc := cdr.NewEncoder(enc.ByteOrder())
+		subEnc := cdr.NewRawEncoder(enc.ByteOrder())
 {{- if isString $f.Type}}
 {{- if isOptional $f}}
 		if err := subEnc.WriteString(*s.{{pascalCase $f.Name}}); err != nil {

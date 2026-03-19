@@ -5,7 +5,7 @@ Usage:
     pip install pycdr2
     python generate.py
 
-Produces .bin files containing raw XCDR2 CDR payloads (no encapsulation header)
+Produces .bin files containing XCDR2 CDR payloads with encapsulation header
 for cross-language interoperability testing with the Go CDR decoder.
 """
 
@@ -40,11 +40,6 @@ class PrimitiveTypes(IdlStruct):
     val_string: str
 
 
-def strip_header(data: bytes) -> bytes:
-    """Remove the 4-byte CDR encapsulation header."""
-    return data[4:]
-
-
 def write_fixture(name: str, data: bytes) -> None:
     path = OUTDIR / f"{name}.bin"
     path.write_bytes(data)
@@ -62,7 +57,7 @@ def main() -> None:
         location="warehouse-A",
         active=True,
     )
-    raw = strip_header(sensor.serialize(use_version_2=True))
+    raw =sensor.serialize(use_version_2=True)
     write_fixture("sensor_data_le", raw)
 
     # 2. PrimitiveTypes -- various primitive types
@@ -73,7 +68,7 @@ def main() -> None:
         val_float64=2.718281828459045,
         val_string="Hello, DDS!",
     )
-    raw = strip_header(prims.serialize(use_version_2=True))
+    raw =prims.serialize(use_version_2=True)
     write_fixture("primitive_types_le", raw)
 
     # 3. Empty string edge case
@@ -84,7 +79,7 @@ def main() -> None:
         val_float64=0.0,
         val_string="",
     )
-    raw = strip_header(empty_str.serialize(use_version_2=True))
+    raw =empty_str.serialize(use_version_2=True)
     write_fixture("empty_string_le", raw)
 
     print("Done.")

@@ -68,12 +68,12 @@ func TestRoundTrip_FinalStruct(t *testing.T) {
 		Active:      true,
 	}
 
-	enc := cdr.NewEncoder(binary.LittleEndian)
+	enc := cdr.NewRawEncoder(binary.LittleEndian)
 	if err := original.MarshalCDR(enc); err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	dec := cdr.NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := cdr.NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	var decoded SensorData
 	if err := decoded.UnmarshalCDR(dec); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -142,12 +142,12 @@ func TestRoundTrip_AppendableStruct(t *testing.T) {
 		Timestamp: 1710000000,
 	}
 
-	enc := cdr.NewEncoder(binary.LittleEndian)
+	enc := cdr.NewRawEncoder(binary.LittleEndian)
 	if err := original.MarshalCDR(enc); err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	dec := cdr.NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := cdr.NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	var decoded AppendableEvent
 	if err := decoded.UnmarshalCDR(dec); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -246,12 +246,12 @@ func TestRoundTrip_MutableStruct(t *testing.T) {
 		Content: "Hello, DDS World!",
 	}
 
-	enc := cdr.NewEncoder(binary.LittleEndian)
+	enc := cdr.NewRawEncoder(binary.LittleEndian)
 	if err := original.MarshalCDR(enc); err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	dec := cdr.NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := cdr.NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	var decoded MutableMessage
 	if err := decoded.UnmarshalCDR(dec); err != nil {
 		t.Fatalf("unmarshal: %v", err)

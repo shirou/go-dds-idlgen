@@ -8,8 +8,8 @@ import (
 
 // ---------- helpers ----------
 
-func encoderLE() *Encoder { return NewEncoder(binary.LittleEndian) }
-func encoderBE() *Encoder { return NewEncoder(binary.BigEndian) }
+func encoderLE() *Encoder { return NewRawEncoder(binary.LittleEndian) }
+func encoderBE() *Encoder { return NewRawEncoder(binary.BigEndian) }
 
 func roundTrip[T any](
 	t *testing.T,
@@ -20,11 +20,11 @@ func roundTrip[T any](
 	t.Helper()
 	for _, order := range []binary.ByteOrder{binary.LittleEndian, binary.BigEndian} {
 		for _, v := range values {
-			enc := NewEncoder(order)
+			enc := NewRawEncoder(order)
 			if err := write(enc, v); err != nil {
 				t.Fatalf("write(%v): %v", v, err)
 			}
-			dec := NewDecoder(enc.Bytes(), order)
+			dec := NewRawDecoder(enc.Bytes(), order)
 			got, err := read(dec)
 			if err != nil {
 				t.Fatalf("read back %v: %v", v, err)
@@ -161,7 +161,7 @@ func TestAlignmentInt8ThenInt32(t *testing.T) {
 		}
 	}
 
-	dec := NewDecoder(data, binary.LittleEndian)
+	dec := NewRawDecoder(data, binary.LittleEndian)
 	v8, _ := dec.ReadInt8()
 	v32, _ := dec.ReadInt32()
 	if v8 != 1 || v32 != 42 {
@@ -181,7 +181,7 @@ func TestXCDR2MaxAlignment(t *testing.T) {
 		t.Fatalf("expected 12 bytes (XCDR2 max align 4), got %d", len(data))
 	}
 
-	dec := NewDecoder(data, binary.LittleEndian)
+	dec := NewRawDecoder(data, binary.LittleEndian)
 	v8, _ := dec.ReadInt8()
 	v64, _ := dec.ReadInt64()
 	if v8 != 1 || v64 != 99 {
@@ -200,7 +200,7 @@ func TestDHeaderRoundTrip(t *testing.T) {
 	enc.FinishDHeader(start)
 
 	data := enc.Bytes()
-	dec := NewDecoder(data, binary.LittleEndian)
+	dec := NewRawDecoder(data, binary.LittleEndian)
 
 	dlen, err := dec.ReadDHeader()
 	if err != nil {
@@ -235,7 +235,7 @@ func TestEMHeaderFixedSizes(t *testing.T) {
 		enc := encoderLE()
 		_ = enc.WriteEMHeader(false, 5, tt.dataSize)
 
-		dec := NewDecoder(enc.Bytes(), binary.LittleEndian)
+		dec := NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 		mu, lc, mid, ni, err := dec.ReadEMHeader()
 		if err != nil {
 			t.Fatalf("dataSize=%d: %v", tt.dataSize, err)
@@ -259,7 +259,7 @@ func TestEMHeaderNextInt(t *testing.T) {
 	enc := encoderLE()
 	_ = enc.WriteEMHeader(true, 42, 100)
 
-	dec := NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	mu, lc, mid, ni, err := dec.ReadEMHeader()
 	if err != nil {
 		t.Fatal(err)
@@ -282,7 +282,7 @@ func TestEMHeaderMustUnderstand(t *testing.T) {
 	enc := encoderLE()
 	_ = enc.WriteEMHeader(true, 7, 4)
 
-	dec := NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	mu, lc, mid, _, err := dec.ReadEMHeader()
 	if err != nil {
 		t.Fatal(err)
@@ -318,7 +318,7 @@ func TestEmptyString(t *testing.T) {
 	enc := encoderLE()
 	_ = enc.WriteString("")
 
-	dec := NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	s, err := dec.ReadString()
 	if err != nil {
 		t.Fatal(err)
@@ -338,7 +338,7 @@ func TestZeroValues(t *testing.T) {
 	_ = enc.WriteFloat32(0)
 	_ = enc.WriteFloat64(0)
 
-	dec := NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 
 	b, _ := dec.ReadBool()
 	i8, _ := dec.ReadInt8()
@@ -359,7 +359,7 @@ func TestMaxValues(t *testing.T) {
 	_ = enc.WriteInt32(math.MaxInt32)
 	_ = enc.WriteUint64(math.MaxUint64)
 
-	dec := NewDecoder(enc.Bytes(), binary.BigEndian)
+	dec := NewRawDecoder(enc.Bytes(), binary.BigEndian)
 	u16, _ := dec.ReadUint16()
 	i32, _ := dec.ReadInt32()
 	u64, _ := dec.ReadUint64()
@@ -380,7 +380,7 @@ func TestDecoderRemainingAndPos(t *testing.T) {
 	_ = enc.WriteUint32(1)
 	_ = enc.WriteUint32(2)
 
-	dec := NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	if dec.Remaining() != 8 {
 		t.Errorf("remaining = %d, want 8", dec.Remaining())
 	}
@@ -398,7 +398,7 @@ func TestDecoderRemainingAndPos(t *testing.T) {
 }
 
 func TestDecoderReadPastEnd(t *testing.T) {
-	dec := NewDecoder([]byte{0x01}, binary.LittleEndian)
+	dec := NewRawDecoder([]byte{0x01}, binary.LittleEndian)
 	_, err := dec.ReadUint32()
 	if err == nil {
 		t.Fatal("expected error reading uint32 from 1-byte buffer")
@@ -414,9 +414,113 @@ func TestEncoderReset(t *testing.T) {
 	}
 	// Verify encoder is usable after reset.
 	_ = enc.WriteUint32(7)
-	dec := NewDecoder(enc.Bytes(), binary.LittleEndian)
+	dec := NewRawDecoder(enc.Bytes(), binary.LittleEndian)
 	v, _ := dec.ReadUint32()
 	if v != 7 {
 		t.Errorf("got %d after reset, want 7", v)
+	}
+}
+
+// ---------- encapsulation header ----------
+
+func TestNewEncoderWritesHeader(t *testing.T) {
+	enc := NewEncoder(CDR2_LE)
+	_ = enc.WriteUint32(0xDEADBEEF)
+
+	data := enc.Bytes()
+	// 4 (header) + 4 (uint32) = 8
+	if len(data) != 8 {
+		t.Fatalf("expected 8 bytes, got %d", len(data))
+	}
+	// Header: kind=0x0006 big-endian, options=0x0000
+	if data[0] != 0x00 || data[1] != 0x06 || data[2] != 0x00 || data[3] != 0x00 {
+		t.Errorf("header = %x, want [00 06 00 00]", data[:4])
+	}
+	// Payload in LE
+	v := binary.LittleEndian.Uint32(data[4:8])
+	if v != 0xDEADBEEF {
+		t.Errorf("payload = %#x, want 0xDEADBEEF", v)
+	}
+}
+
+func TestNewEncoderBEHeader(t *testing.T) {
+	enc := NewEncoder(CDR2_BE)
+	_ = enc.WriteUint32(0x12345678)
+
+	data := enc.Bytes()
+	if data[0] != 0x00 || data[1] != 0x07 {
+		t.Errorf("header kind = %x %x, want 00 07", data[0], data[1])
+	}
+	v := binary.BigEndian.Uint32(data[4:8])
+	if v != 0x12345678 {
+		t.Errorf("payload = %#x, want 0x12345678", v)
+	}
+}
+
+func TestNewDecoderReadsHeader(t *testing.T) {
+	// Build data with CDR2_LE header + a uint32
+	var buf [8]byte
+	binary.BigEndian.PutUint16(buf[:2], uint16(CDR2_LE))
+	binary.LittleEndian.PutUint32(buf[4:8], 42)
+
+	dec, err := NewDecoder(buf[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := dec.ReadUint32()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 42 {
+		t.Errorf("got %d, want 42", v)
+	}
+}
+
+func TestNewDecoderTooShort(t *testing.T) {
+	_, err := NewDecoder([]byte{0x00, 0x06})
+	if err == nil {
+		t.Fatal("expected error for short data")
+	}
+}
+
+func TestNewDecoderUnknownKind(t *testing.T) {
+	data := []byte{0xFF, 0xFF, 0x00, 0x00}
+	_, err := NewDecoder(data)
+	if err == nil {
+		t.Fatal("expected error for unknown encapsulation kind")
+	}
+}
+
+func TestRoundTripWithEncapsulationHeader(t *testing.T) {
+	for _, kind := range []EncapsulationKind{CDR2_LE, CDR2_BE, DELIMITED_CDR2_LE, PL_CDR2_BE} {
+		enc := NewEncoder(kind)
+		_ = enc.WriteUint32(12345)
+		_ = enc.WriteString("hello")
+
+		dec, err := NewDecoder(enc.Bytes())
+		if err != nil {
+			t.Fatalf("kind=%#x: NewDecoder: %v", kind, err)
+		}
+		v, _ := dec.ReadUint32()
+		s, _ := dec.ReadString()
+		if v != 12345 || s != "hello" {
+			t.Errorf("kind=%#x: got (%d, %q), want (12345, hello)", kind, v, s)
+		}
+	}
+}
+
+func TestGetEncapsulationKind(t *testing.T) {
+	kind := GetEncapsulationKind(FINAL)
+	// Just verify it returns a valid LE or BE kind
+	if kind != CDR2_LE && kind != CDR2_BE {
+		t.Errorf("FINAL: got %#x, want CDR2_LE or CDR2_BE", kind)
+	}
+	kind = GetEncapsulationKind(APPENDABLE)
+	if kind != DELIMITED_CDR2_LE && kind != DELIMITED_CDR2_BE {
+		t.Errorf("APPENDABLE: got %#x", kind)
+	}
+	kind = GetEncapsulationKind(MUTABLE)
+	if kind != PL_CDR2_LE && kind != PL_CDR2_BE {
+		t.Errorf("MUTABLE: got %#x", kind)
 	}
 }

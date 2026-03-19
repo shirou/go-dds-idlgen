@@ -13,8 +13,22 @@ type Encoder struct {
 	order binary.ByteOrder
 }
 
-// NewEncoder returns an Encoder that writes data in the given byte order.
-func NewEncoder(order binary.ByteOrder) *Encoder {
+// NewEncoder returns an Encoder that writes the 4-byte encapsulation header
+// for the given kind and then serializes subsequent values in the
+// corresponding byte order.
+func NewEncoder(kind EncapsulationKind) *Encoder {
+	e := &Encoder{order: kind.ByteOrder()}
+	// Encapsulation header: 2-byte kind (big-endian) + 2-byte options (zero).
+	var hdr [4]byte
+	binary.BigEndian.PutUint16(hdr[:2], uint16(kind))
+	e.buf.Write(hdr[:])
+	e.pos = 4
+	return e
+}
+
+// NewRawEncoder returns an Encoder that writes data in the given byte order
+// without an encapsulation header.
+func NewRawEncoder(order binary.ByteOrder) *Encoder {
 	return &Encoder{order: order}
 }
 

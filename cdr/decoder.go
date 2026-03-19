@@ -13,9 +13,25 @@ type Decoder struct {
 	order binary.ByteOrder
 }
 
-// NewDecoder creates a Decoder that reads from data using the given byte
-// order.
-func NewDecoder(data []byte, order binary.ByteOrder) *Decoder {
+// NewDecoder creates a Decoder that reads the 4-byte encapsulation header
+// from data to determine the byte order, then positions the read cursor
+// at the start of the CDR payload.
+func NewDecoder(data []byte) (*Decoder, error) {
+	if len(data) < 4 {
+		return nil, fmt.Errorf("cdr: data too short for encapsulation header (%d bytes)", len(data))
+	}
+	kind := EncapsulationKind(binary.BigEndian.Uint16(data[:2]))
+	switch kind {
+	case CDR2_LE, CDR2_BE, DELIMITED_CDR2_LE, DELIMITED_CDR2_BE, PL_CDR2_LE, PL_CDR2_BE:
+	default:
+		return nil, fmt.Errorf("cdr: unknown encapsulation kind 0x%04x", uint16(kind))
+	}
+	return &Decoder{data: data, pos: 4, order: kind.ByteOrder()}, nil
+}
+
+// NewRawDecoder creates a Decoder that reads from data using the given byte
+// order without expecting an encapsulation header.
+func NewRawDecoder(data []byte, order binary.ByteOrder) *Decoder {
 	return &Decoder{data: data, order: order}
 }
 

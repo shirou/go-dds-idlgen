@@ -75,7 +75,6 @@ Use the generated code:
 package main
 
 import (
-    "encoding/binary"
     "fmt"
 
     "github.com/shirou/go-dds-idlgen/cdr"
@@ -90,12 +89,12 @@ func main() {
         Location:    "Room 101",
     }
 
-    // Serialize
-    enc := cdr.NewEncoder(binary.LittleEndian)
+    // Serialize (encapsulation header is written automatically)
+    enc := cdr.NewEncoder(cdr.GetEncapsulationKind(cdr.FINAL))
     _ = data.MarshalCDR(enc)
 
-    // Deserialize
-    dec := cdr.NewDecoder(enc.Bytes(), binary.LittleEndian)
+    // Deserialize (byte order is read from the encapsulation header)
+    dec, _ := cdr.NewDecoder(enc.Bytes())
     var result sensor.SensorData
     _ = result.UnmarshalCDR(dec)
 
@@ -173,11 +172,11 @@ also use it directly:
 ```go
 import "github.com/shirou/go-dds-idlgen/cdr"
 
-enc := cdr.NewEncoder(binary.LittleEndian)
+enc := cdr.NewEncoder(cdr.CDR2_LE)
 enc.WriteUint32(42)
 enc.WriteString("hello")
 
-dec := cdr.NewDecoder(enc.Bytes(), binary.LittleEndian)
+dec, _ := cdr.NewDecoder(enc.Bytes())
 v, _ := dec.ReadUint32()   // 42
 s, _ := dec.ReadString()   // "hello"
 ```

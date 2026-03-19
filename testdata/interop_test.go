@@ -1,7 +1,6 @@
 package testdata_test
 
 import (
-	"encoding/binary"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -43,7 +42,10 @@ func readFixture(t *testing.T, name string) []byte {
 //	};
 func TestInterop_SensorData(t *testing.T) {
 	data := readFixture(t, "sensor_data_le.bin")
-	dec := cdr.NewDecoder(data, binary.LittleEndian)
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
 
 	sensorID, err := dec.ReadInt32()
 	if err != nil {
@@ -102,7 +104,10 @@ func TestInterop_SensorData(t *testing.T) {
 //	};
 func TestInterop_PrimitiveTypes(t *testing.T) {
 	data := readFixture(t, "primitive_types_le.bin")
-	dec := cdr.NewDecoder(data, binary.LittleEndian)
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
 
 	valBool, err := dec.ReadBool()
 	if err != nil {
@@ -149,7 +154,10 @@ func TestInterop_PrimitiveTypes(t *testing.T) {
 // TestInterop_EmptyString decodes a struct with an empty string field.
 func TestInterop_EmptyString(t *testing.T) {
 	data := readFixture(t, "empty_string_le.bin")
-	dec := cdr.NewDecoder(data, binary.LittleEndian)
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
 
 	valBool, err := dec.ReadBool()
 	if err != nil {

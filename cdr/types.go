@@ -46,6 +46,46 @@ const (
 	PL_CDR2_BE EncapsulationKind = 0x000b
 )
 
+// ByteOrder returns the byte order implied by this encapsulation kind.
+// LE variants (even values) return binary.LittleEndian; BE variants (odd
+// values) return binary.BigEndian.
+func (k EncapsulationKind) ByteOrder() binary.ByteOrder {
+	if k&1 == 0 {
+		return binary.LittleEndian
+	}
+	return binary.BigEndian
+}
+
+// GetEncapsulationKind returns the EncapsulationKind for the given
+// extensibility using the platform's native byte order.
+func GetEncapsulationKind(ext ExtensibilityKind) EncapsulationKind {
+	le := isNativeLE()
+	switch ext {
+	case APPENDABLE:
+		if le {
+			return DELIMITED_CDR2_LE
+		}
+		return DELIMITED_CDR2_BE
+	case MUTABLE:
+		if le {
+			return PL_CDR2_LE
+		}
+		return PL_CDR2_BE
+	default: // FINAL
+		if le {
+			return CDR2_LE
+		}
+		return CDR2_BE
+	}
+}
+
+// isNativeLE reports whether the platform uses little-endian byte order.
+func isNativeLE() bool {
+	var buf [2]byte
+	binary.NativeEndian.PutUint16(buf[:], 0x0102)
+	return buf[0] == 0x02
+}
+
 // MemberID is a 28-bit identifier for a member in PL_CDR2 (MUTABLE) encoding.
 type MemberID = uint32
 
