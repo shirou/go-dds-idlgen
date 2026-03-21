@@ -859,6 +859,103 @@ func TestGenerate_UnionWithIntegerDiscriminator(t *testing.T) {
 	}
 }
 
+func TestGenerate_NestedStruct(t *testing.T) {
+	g, err := New(Config{OutputDir: "/tmp/test"})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			&ast.Struct{
+				Name: "InnerData",
+				Fields: []ast.Field{
+					{Name: "value", Type: &ast.BasicType{Name: "uint32"}},
+				},
+				Annotations: []ast.Annotation{
+					{Name: "nested"},
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	data, ok := result["."]
+	if !ok {
+		t.Fatal("expected output for '.' package path")
+	}
+
+	src := string(data)
+
+	// @nested structs should NOT have MarshalCDR/UnmarshalCDR
+	if strings.Contains(src, "MarshalCDR") {
+		t.Errorf("@nested struct should not have MarshalCDR:\n%s", src)
+	}
+	if strings.Contains(src, "UnmarshalCDR") {
+		t.Errorf("@nested struct should not have UnmarshalCDR:\n%s", src)
+	}
+
+	// @nested structs should still have EncodeCDR/DecodeCDR
+	if !strings.Contains(src, "EncodeCDR") {
+		t.Errorf("@nested struct should have EncodeCDR:\n%s", src)
+	}
+	if !strings.Contains(src, "DecodeCDR") {
+		t.Errorf("@nested struct should have DecodeCDR:\n%s", src)
+	}
+
+	// Should still have CDRExtensibility
+	if !strings.Contains(src, "CDRExtensibility") {
+		t.Errorf("@nested struct should have CDRExtensibility:\n%s", src)
+	}
+}
+
+func TestGenerate_NestedFalseStruct(t *testing.T) {
+	g, err := New(Config{OutputDir: "/tmp/test"})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			&ast.Struct{
+				Name: "TopicData",
+				Fields: []ast.Field{
+					{Name: "value", Type: &ast.BasicType{Name: "uint32"}},
+				},
+				Annotations: []ast.Annotation{
+					{Name: "nested", Params: map[string]string{"value": "FALSE"}},
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	data, ok := result["."]
+	if !ok {
+		t.Fatal("expected output for '.' package path")
+	}
+
+	src := string(data)
+
+	// @nested(FALSE) should still have MarshalCDR/UnmarshalCDR
+	if !strings.Contains(src, "MarshalCDR") {
+		t.Errorf("@nested(FALSE) struct should have MarshalCDR:\n%s", src)
+	}
+	if !strings.Contains(src, "UnmarshalCDR") {
+		t.Errorf("@nested(FALSE) struct should have UnmarshalCDR:\n%s", src)
+	}
+}
+
 func TestGenerate_EmptyFile(t *testing.T) {
 	g, err := New(Config{OutputDir: "/tmp/test"})
 	if err != nil {

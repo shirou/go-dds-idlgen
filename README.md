@@ -244,6 +244,7 @@ supported, preserving the original discriminator value.
 | `@key` | Marks DDS key fields (metadata only) |
 | `@optional` | Maps field to Go pointer type; presence-flagged in FINAL/APPENDABLE |
 | `@id(N)` | Explicit member ID for MUTABLE encoding |
+| `@nested` | Marks type as nested-only (no top-level `MarshalCDR`/`UnmarshalCDR`; `EncodeCDR`/`DecodeCDR` are still generated). `@nested(FALSE)` explicitly marks a type as non-nested. |
 
 ### Skipped Constructs
 

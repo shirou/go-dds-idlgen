@@ -97,6 +97,7 @@ func New(cfg Config) (*Generator, error) {
 		"unionSwitchExpr":                  unionSwitchExpr,
 		"unionDefaultDiscriminatorGoType":  unionDefaultDiscriminatorGoType,
 		"unionHasDefaultCase":              unionHasDefaultCase,
+		"isNestedStruct":    isNestedStruct,
 		"lower":             strings.ToLower,
 		"upper":             strings.ToUpper,
 		"add":               func(a, b int) int { return a + b },

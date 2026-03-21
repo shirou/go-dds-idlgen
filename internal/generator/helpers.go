@@ -562,6 +562,20 @@ func unionHasDefaultCase(u *ast.Union) bool {
 	return u.DefaultCase != nil
 }
 
+// isNestedStruct returns true if the struct has @nested annotation (and not @nested(FALSE)).
+// Nested types should not have top-level MarshalCDR/UnmarshalCDR methods.
+func isNestedStruct(s *ast.Struct) bool {
+	for _, a := range s.Annotations {
+		if a.Name == "nested" {
+			if v, ok := a.Params["value"]; ok && strings.EqualFold(v, "FALSE") {
+				return false
+			}
+			return true
+		}
+	}
+	return false
+}
+
 // cdrSerializedSize returns the fixed serialized size for a type, or 0 if variable.
 func cdrSerializedSize(t ast.TypeRef) int {
 	t = resolveUnderlying(t)

@@ -4,6 +4,7 @@ func (s *{{pascalCase .Struct.Name}}) CDRExtensibility() cdr.ExtensibilityKind {
 	return cdr.FINAL
 }
 
+{{- if not (isNestedStruct .Struct)}}
 // MarshalCDR serializes {{pascalCase .Struct.Name}} into CDR format with encapsulation header.
 func (s *{{pascalCase .Struct.Name}}) MarshalCDR() ([]byte, error) {
 	enc := cdr.NewEncoder(cdr.GetEncapsulationKind(s.CDRExtensibility()))
@@ -21,6 +22,7 @@ func (s *{{pascalCase .Struct.Name}}) UnmarshalCDR(data []byte) error {
 	}
 	return s.DecodeCDR(dec)
 }
+{{- end}}
 
 // EncodeCDR serializes {{pascalCase .Struct.Name}} using XCDR2 FINAL encoding.
 func (s *{{pascalCase .Struct.Name}}) EncodeCDR(enc *cdr.Encoder) error {
