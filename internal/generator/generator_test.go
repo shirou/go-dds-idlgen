@@ -716,6 +716,149 @@ func TestGenerate_SamePackageTypeRef(t *testing.T) {
 	}
 }
 
+func TestGenerate_UnionWithEnumDiscriminator(t *testing.T) {
+	g, err := New(Config{OutputDir: "/tmp/test"})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	filterEnum := &ast.Enum{
+		Name: "FilterTypeEnum",
+		Values: []ast.EnumValue{
+			{Name: "ALL_D"},
+			{Name: "DECIMATE_D"},
+		},
+	}
+
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			filterEnum,
+			&ast.Union{
+				Name:          "FilterTypeUnion",
+				Discriminator: &ast.NamedType{Name: "FilterTypeEnum", Resolved: filterEnum},
+				Cases: []ast.UnionCase{
+					{
+						Labels: []string{"ALL_D"},
+						Type:   &ast.BasicType{Name: "int32"},
+						Name:   "AllVariant",
+					},
+					{
+						Labels: []string{"DECIMATE_D"},
+						Type:   &ast.BasicType{Name: "double"},
+						Name:   "DecimateVariant",
+					},
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	data, ok := result["."]
+	if !ok {
+		t.Fatal("expected output for '.' package path")
+	}
+
+	src := string(data)
+
+	// Verify valid Go
+	if _, err := format.Source(data); err != nil {
+		t.Fatalf("generated source is not valid Go: %v\nsource:\n%s", err, src)
+	}
+
+	// Check interface
+	if !strings.Contains(src, "isFilterTypeUnionValue") {
+		t.Errorf("expected sealed interface in output:\n%s", src)
+	}
+	// Check union struct
+	if !strings.Contains(src, "type FilterTypeUnion struct") {
+		t.Errorf("expected union struct in output:\n%s", src)
+	}
+	// Check wrapper types
+	if !strings.Contains(src, "FilterTypeUnion_AllVariant") {
+		t.Errorf("expected wrapper type AllVariant in output:\n%s", src)
+	}
+	if !strings.Contains(src, "FilterTypeUnion_DecimateVariant") {
+		t.Errorf("expected wrapper type DecimateVariant in output:\n%s", src)
+	}
+	// Check CDR methods
+	if !strings.Contains(src, "EncodeCDR") {
+		t.Errorf("expected EncodeCDR method in output:\n%s", src)
+	}
+	if !strings.Contains(src, "DecodeCDR") {
+		t.Errorf("expected DecodeCDR method in output:\n%s", src)
+	}
+	// Check enum constant in switch
+	if !strings.Contains(src, "FilterTypeEnumALL_D") {
+		t.Errorf("expected enum constant in output:\n%s", src)
+	}
+}
+
+func TestGenerate_UnionWithIntegerDiscriminator(t *testing.T) {
+	g, err := New(Config{OutputDir: "/tmp/test"})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			&ast.Union{
+				Name:          "IntUnion",
+				Discriminator: &ast.BasicType{Name: "int32"},
+				Cases: []ast.UnionCase{
+					{
+						Labels: []string{"1"},
+						Type:   &ast.BasicType{Name: "int32"},
+						Name:   "intVal",
+					},
+					{
+						Labels: []string{"2"},
+						Type:   &ast.BasicType{Name: "double"},
+						Name:   "doubleVal",
+					},
+				},
+				DefaultCase: &ast.UnionCase{
+					Type: &ast.BasicType{Name: "octet"},
+					Name: "defaultVal",
+				},
+			},
+		},
+	}
+
+	result, err := g.GenerateToBuffer(file)
+	if err != nil {
+		t.Fatalf("GenerateToBuffer() error: %v", err)
+	}
+
+	data, ok := result["."]
+	if !ok {
+		t.Fatal("expected output for '.' package path")
+	}
+
+	src := string(data)
+
+	if _, err := format.Source(data); err != nil {
+		t.Fatalf("generated source is not valid Go: %v\nsource:\n%s", err, src)
+	}
+
+	// Check wrapper for default case
+	if !strings.Contains(src, "IntUnion_DefaultVal") {
+		t.Errorf("expected default wrapper type in output:\n%s", src)
+	}
+	// Check integer case labels in decoder
+	if !strings.Contains(src, "case 1:") {
+		t.Errorf("expected 'case 1:' in output:\n%s", src)
+	}
+	if !strings.Contains(src, "case 2:") {
+		t.Errorf("expected 'case 2:' in output:\n%s", src)
+	}
+}
+
 func TestGenerate_EmptyFile(t *testing.T) {
 	g, err := New(Config{OutputDir: "/tmp/test"})
 	if err != nil {

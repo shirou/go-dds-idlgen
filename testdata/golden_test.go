@@ -8,6 +8,7 @@ import (
 
 	"github.com/shirou/go-dds-idlgen/internal/generator"
 	"github.com/shirou/go-dds-idlgen/internal/parser"
+	"github.com/shirou/go-dds-idlgen/internal/resolver"
 )
 
 // TestGoldenFiles parses each testdata IDL file and verifies the generated
@@ -107,6 +108,29 @@ func TestGoldenFiles(t *testing.T) {
 			},
 		},
 		{
+			name: "union_type",
+			dir:  "union_type",
+			expected: map[string][]string{
+				"variant": {
+					"package variant",
+					"type ShapeKind int32",
+					"ShapeKindCIRCLE_D",
+					"ShapeKindRECTANGLE_D",
+					"ShapeKindTRIANGLE_D",
+					"isShapeUnionValue",
+					"type ShapeUnion struct",
+					"ShapeUnion_CircleVariant",
+					"ShapeUnion_RectangleVariant",
+					"ShapeUnion_TriangleVariant",
+					"EncodeCDR",
+					"DecodeCDR",
+					"WriteUint32",
+					"ReadUint32",
+					"type ShapeMessage struct",
+				},
+			},
+		},
+		{
 			name: "appendable_struct",
 			dir:  "appendable_struct",
 			expected: map[string][]string{
@@ -139,6 +163,13 @@ func TestGoldenFiles(t *testing.T) {
 			file, err := parser.Parse(filepath.Base(idlPath), data)
 			if err != nil {
 				t.Fatalf("parse IDL: %v", err)
+			}
+
+			// Resolve types so that NamedType references are linked.
+			typeResolver := resolver.NewTypeResolver()
+			typeResolver.BuildScope(file)
+			if err := typeResolver.Resolve(file); err != nil {
+				t.Fatalf("resolve types: %v", err)
 			}
 
 			gen, err := generator.New(generator.Config{

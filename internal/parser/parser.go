@@ -215,7 +215,9 @@ func (p *Parser) parseDefinition(annotations []ast.Annotation) ast.Definition {
 		return p.parseTypedef()
 	case "const":
 		return p.parseConst()
-	case "interface", "union", "valuetype", "bitset", "bitmask":
+	case "union":
+		return p.parseUnion(annotations)
+	case "interface", "valuetype", "bitset", "bitmask":
 		return p.parseSkipped()
 	default:
 		p.addError(fmt.Sprintf("unexpected keyword %q", p.tok.Value))
@@ -374,6 +376,87 @@ func (p *Parser) parseConst() *ast.Const {
 		Type:  typeRef,
 		Value: strings.Join(valueParts, " "),
 	}
+}
+
+func (p *Parser) parseUnion(annotations []ast.Annotation) *ast.Union {
+	p.next() // consume "union"
+	name := p.expect(TokenIdent).Value
+
+	// Expect "switch" keyword
+	if p.tok.Kind != TokenIdent || p.tok.Value != "switch" {
+		p.addError(fmt.Sprintf("expected 'switch' after union name, got %s", p.tok))
+		return &ast.Union{Name: name, Annotations: annotations}
+	}
+	p.next() // consume "switch"
+
+	// Parse discriminator type in parentheses
+	p.expect(TokenLParen)
+	discType := p.parseTypeRef()
+	p.expect(TokenRParen)
+
+	p.expect(TokenLBrace)
+
+	u := &ast.Union{
+		Name:          name,
+		Discriminator: discType,
+		Annotations:   annotations,
+	}
+
+	for p.tok.Kind != TokenRBrace && p.tok.Kind != TokenEOF {
+		if p.tok.Kind == TokenIdent && p.tok.Value == "case" {
+			uc := p.parseUnionCase()
+			u.Cases = append(u.Cases, uc)
+		} else if p.tok.Kind == TokenIdent && p.tok.Value == "default" {
+			p.next() // consume "default"
+			p.expect(TokenColon)
+			caseType := p.parseTypeRef()
+			caseName := p.expect(TokenIdent).Value
+			p.expect(TokenSemicolon)
+			u.DefaultCase = &ast.UnionCase{
+				Type: caseType,
+				Name: caseName,
+			}
+		} else {
+			p.addError(fmt.Sprintf("expected 'case' or 'default' in union, got %s", p.tok))
+			p.next()
+		}
+	}
+
+	p.expect(TokenRBrace)
+	p.expect(TokenSemicolon)
+	return u
+}
+
+func (p *Parser) parseUnionCase() ast.UnionCase {
+	var labels []string
+	// Parse one or more "case LABEL:" prefixes (multiple labels for same branch)
+	for p.tok.Kind == TokenIdent && p.tok.Value == "case" {
+		p.next() // consume "case"
+		label := p.parseUnionCaseLabel()
+		labels = append(labels, label)
+		p.expect(TokenColon)
+	}
+
+	caseType := p.parseTypeRef()
+	caseName := p.expect(TokenIdent).Value
+	p.expect(TokenSemicolon)
+
+	return ast.UnionCase{
+		Labels: labels,
+		Type:   caseType,
+		Name:   caseName,
+	}
+}
+
+func (p *Parser) parseUnionCaseLabel() string {
+	// Could be an integer literal, negative integer, or a scoped enum value name
+	if p.tok.Kind == TokenIntLiteral {
+		val := p.tok.Value
+		p.next()
+		return val
+	}
+	// Scoped or unscoped identifier (enum value)
+	return p.parseScopedName()
 }
 
 func (p *Parser) parseSkipped() *ast.SkippedDecl {

@@ -1,0 +1,34 @@
+module variant {
+
+    enum ShapeKind {
+        CIRCLE_D,
+        RECTANGLE_D,
+        TRIANGLE_D
+    };
+
+    struct CircleData {
+        double radius;
+    };
+
+    struct RectangleData {
+        double width;
+        double height;
+    };
+
+    @nested
+    union ShapeUnion switch (ShapeKind)
+    {
+        case CIRCLE_D:
+            CircleData circleVariant;
+        case RECTANGLE_D:
+            RectangleData rectangleVariant;
+        case TRIANGLE_D:
+            long triangleVariant;
+    };
+
+    struct ShapeMessage {
+        long id;
+        ShapeUnion shape;
+    };
+
+};

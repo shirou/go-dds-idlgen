@@ -109,6 +109,8 @@ func (r *TypeResolver) buildScopeDefs(scope *Scope, defs []ast.Definition) {
 			scope.Types[d.Name] = d
 		case *ast.Typedef:
 			scope.Types[d.Name] = d
+		case *ast.Union:
+			scope.Types[d.Name] = d
 		case *ast.SkippedDecl:
 			if d.Name != "" {
 				scope.Types[d.Name] = d
@@ -137,6 +139,23 @@ func (r *TypeResolver) resolveDefs(scope *Scope, defs []ast.Definition) error {
 			for i := range d.Fields {
 				if err := r.resolveTypeRef(scope, &d.Fields[i].Type); err != nil {
 					return fmt.Errorf("field %s.%s: %w", d.Name, d.Fields[i].Name, err)
+				}
+			}
+		case *ast.Union:
+			if d.Discriminator == nil {
+				return fmt.Errorf("union %s: missing discriminator type", d.Name)
+			}
+			if err := r.resolveTypeRef(scope, &d.Discriminator); err != nil {
+				return fmt.Errorf("union %s discriminator: %w", d.Name, err)
+			}
+			for i := range d.Cases {
+				if err := r.resolveTypeRef(scope, &d.Cases[i].Type); err != nil {
+					return fmt.Errorf("union %s case %s: %w", d.Name, d.Cases[i].Name, err)
+				}
+			}
+			if d.DefaultCase != nil {
+				if err := r.resolveTypeRef(scope, &d.DefaultCase.Type); err != nil {
+					return fmt.Errorf("union %s default case: %w", d.Name, err)
 				}
 			}
 		case *ast.Typedef:

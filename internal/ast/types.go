@@ -63,9 +63,25 @@ type Const struct {
 	Value string // string representation of the value
 }
 
-// SkippedDecl represents a declaration that was skipped (union, interface, etc.).
+// Union represents an IDL discriminated union.
+type Union struct {
+	Name          string
+	Discriminator TypeRef      // switch type: NamedType (enum) or BasicType (integer)
+	Cases         []UnionCase
+	DefaultCase   *UnionCase   // nil if no default
+	Annotations   []Annotation
+}
+
+// UnionCase represents a single case in a union.
+type UnionCase struct {
+	Labels []string // case label(s): enum value names or integer literals
+	Type   TypeRef
+	Name   string // field name
+}
+
+// SkippedDecl represents a declaration that was skipped (interface, etc.).
 type SkippedDecl struct {
-	Kind    string // "interface", "union", etc.
+	Kind    string // "interface", "valuetype", etc.
 	Name    string
 	Warning string
 }
@@ -80,6 +96,7 @@ type Annotation struct {
 func (*Module) definitionNode()      {}
 func (*Struct) definitionNode()      {}
 func (*Enum) definitionNode()        {}
+func (*Union) definitionNode()       {}
 func (*Typedef) definitionNode()     {}
 func (*Const) definitionNode()       {}
 func (*SkippedDecl) definitionNode() {}

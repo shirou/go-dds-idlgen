@@ -462,6 +462,106 @@ func fieldMemberID(f ast.Field, index int) int {
 	return index
 }
 
+// unionDiscriminatorIsEnum returns true if the union's discriminator is an enum type.
+func unionDiscriminatorIsEnum(u *ast.Union) bool {
+	nt, ok := u.Discriminator.(*ast.NamedType)
+	if !ok {
+		return false
+	}
+	_, isEnum := nt.Resolved.(*ast.Enum)
+	return isEnum
+}
+
+// unionDiscriminatorEnum returns the resolved Enum for the union's discriminator, or nil.
+func unionDiscriminatorEnum(u *ast.Union) *ast.Enum {
+	nt, ok := u.Discriminator.(*ast.NamedType)
+	if !ok {
+		return nil
+	}
+	e, _ := nt.Resolved.(*ast.Enum)
+	return e
+}
+
+// unionDiscriminatorGoType returns the Go type string for the union's discriminator.
+func unionDiscriminatorGoType(u *ast.Union) string {
+	return goType(u.Discriminator)
+}
+
+// unionCaseGoConstant returns the Go constant expression for a union case label.
+// For enum discriminators, it returns "EnumTypeLABEL" (matching enum template output).
+// For integer discriminators, it returns the literal value.
+//
+// TODO: when the discriminator enum is in a different package, this needs to
+// include the package qualifier (e.g., "common.FilterTypeEnumALL_D").
+// Currently assumes the enum is in the same package as the union.
+func unionCaseGoConstant(u *ast.Union, label string) string {
+	e := unionDiscriminatorEnum(u)
+	if e != nil {
+		return pascalCase(e.Name) + label
+	}
+	return label
+}
+
+// unionCaseWrapperName returns the Go wrapper type name for a union case.
+func unionCaseWrapperName(u *ast.Union, uc ast.UnionCase) string {
+	return pascalCase(u.Name) + "_" + pascalCase(uc.Name)
+}
+
+// unionInterfaceName returns the sealed interface name for a union.
+func unionInterfaceName(u *ast.Union) string {
+	return "is" + pascalCase(u.Name) + "Value"
+}
+
+// unionDiscriminatorWriteFunc returns the CDR write method for the discriminator.
+// Enum discriminators use uint32 per the CDR spec.
+func unionDiscriminatorWriteFunc(u *ast.Union) string {
+	if unionDiscriminatorIsEnum(u) {
+		return "WriteUint32"
+	}
+	return cdrWriteFunc(u.Discriminator)
+}
+
+// unionDiscriminatorReadFunc returns the CDR read method for the discriminator.
+// Enum discriminators use uint32 per the CDR spec.
+func unionDiscriminatorReadFunc(u *ast.Union) string {
+	if unionDiscriminatorIsEnum(u) {
+		return "ReadUint32"
+	}
+	return cdrReadFunc(u.Discriminator)
+}
+
+// unionDiscriminatorCastToWire returns the Go cast expression to convert
+// a discriminator constant to the CDR wire type.
+func unionDiscriminatorCastToWire(u *ast.Union) string {
+	if unionDiscriminatorIsEnum(u) {
+		return "uint32"
+	}
+	return goType(u.Discriminator)
+}
+
+// unionSwitchExpr returns the Go switch expression for decoding a union discriminator.
+// For enum: "EnumType(disc)", for integer: "disc".
+func unionSwitchExpr(u *ast.Union) string {
+	if unionDiscriminatorIsEnum(u) {
+		return goType(u.Discriminator) + "(disc)"
+	}
+	return "disc"
+}
+
+// unionDefaultDiscriminatorGoType returns the Go type for the discriminator field
+// stored in a default case wrapper. Enum uses uint32; integer uses the Go type.
+func unionDefaultDiscriminatorGoType(u *ast.Union) string {
+	if unionDiscriminatorIsEnum(u) {
+		return "uint32"
+	}
+	return goType(u.Discriminator)
+}
+
+// unionHasDefaultCase returns true if the union has a default case.
+func unionHasDefaultCase(u *ast.Union) bool {
+	return u.DefaultCase != nil
+}
+
 // cdrSerializedSize returns the fixed serialized size for a type, or 0 if variable.
 func cdrSerializedSize(t ast.TypeRef) int {
 	t = resolveUnderlying(t)

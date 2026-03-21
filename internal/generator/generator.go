@@ -32,9 +32,10 @@ type genUnit struct {
 	Imports     []pkgImport // cross-package imports needed
 	Structs     []*ast.Struct
 	Enums       []*ast.Enum
+	Unions      []*ast.Union
 	Typedefs    []*ast.Typedef
 	Consts      []*ast.Const
-	Skipped     []*ast.SkippedDecl // skipped declarations (union, etc.) to emit as placeholders
+	Skipped     []*ast.SkippedDecl // skipped declarations to emit as placeholders
 }
 
 // pkgImport represents a Go import for a cross-package type reference.
@@ -84,6 +85,18 @@ func New(cfg Config) (*Generator, error) {
 		"hasExplicitValue":  hasExplicitValue,
 		"fieldMemberID":     fieldMemberID,
 		"cdrSerializedSize": cdrSerializedSize,
+		"unionDiscriminatorIsEnum":          unionDiscriminatorIsEnum,
+		"unionDiscriminatorEnum":           unionDiscriminatorEnum,
+		"unionDiscriminatorGoType":         unionDiscriminatorGoType,
+		"unionCaseGoConstant":              unionCaseGoConstant,
+		"unionCaseWrapperName":             unionCaseWrapperName,
+		"unionInterfaceName":               unionInterfaceName,
+		"unionDiscriminatorWriteFunc":      unionDiscriminatorWriteFunc,
+		"unionDiscriminatorReadFunc":       unionDiscriminatorReadFunc,
+		"unionDiscriminatorCastToWire":     unionDiscriminatorCastToWire,
+		"unionSwitchExpr":                  unionSwitchExpr,
+		"unionDefaultDiscriminatorGoType":  unionDefaultDiscriminatorGoType,
+		"unionHasDefaultCase":              unionHasDefaultCase,
 		"lower":             strings.ToLower,
 		"upper":             strings.ToUpper,
 		"add":               func(a, b int) int { return a + b },
@@ -139,6 +152,9 @@ func collectUnits(file *ast.File) map[string]*genUnit {
 			case *ast.Enum:
 				u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
 				u.Enums = append(u.Enums, d)
+			case *ast.Union:
+				u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
+				u.Unions = append(u.Unions, cloneUnion(d))
 			case *ast.Typedef:
 				u := getOrCreateUnit(units, relPath, pkg, flatPath, fileName)
 				u.Typedefs = append(u.Typedefs, cloneTypedef(d))
@@ -186,6 +202,7 @@ func (g *Generator) dedup(relPath string, unit *genUnit) {
 
 	unit.Structs = deduplicateSlice(unit.Structs, seen, func(s *ast.Struct) string { return pascalCase(s.Name) })
 	unit.Enums = deduplicateSlice(unit.Enums, seen, func(e *ast.Enum) string { return pascalCase(e.Name) })
+	unit.Unions = deduplicateSlice(unit.Unions, seen, func(u *ast.Union) string { return pascalCase(u.Name) })
 	unit.Typedefs = deduplicateSlice(unit.Typedefs, seen, func(t *ast.Typedef) string { return pascalCase(t.Name) })
 	unit.Consts = deduplicateSlice(unit.Consts, seen, func(c *ast.Const) string { return pascalCase(c.Name) })
 	unit.Skipped = deduplicateSlice(unit.Skipped, seen, func(s *ast.SkippedDecl) string { return pascalCase(s.Name) })
@@ -380,6 +397,16 @@ func (g *Generator) preprocessUnit(unit *genUnit) {
 			walkTypeRef(&s.Fields[i].Type, resolveNamed)
 		}
 	}
+	// Walk unions
+	for _, u := range unit.Unions {
+		walkTypeRef(&u.Discriminator, resolveNamed)
+		for i := range u.Cases {
+			walkTypeRef(&u.Cases[i].Type, resolveNamed)
+		}
+		if u.DefaultCase != nil {
+			walkTypeRef(&u.DefaultCase.Type, resolveNamed)
+		}
+	}
 	// Walk typedefs
 	for _, td := range unit.Typedefs {
 		walkTypeRef(&td.Type, resolveNamed)
@@ -447,7 +474,14 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 		}
 	}
 
-	// Render placeholder types for skipped declarations (e.g., unions)
+	// Render unions
+	if len(unit.Unions) > 0 {
+		if err := g.templates.ExecuteTemplate(&buf, "union.go.tmpl", unit); err != nil {
+			return nil, fmt.Errorf("execute union template: %w", err)
+		}
+	}
+
+	// Render placeholder types for skipped declarations
 	for _, sk := range unit.Skipped {
 		name := pascalCase(sk.Name)
 		fmt.Fprintf(&buf, "\n// %s is a placeholder for IDL %s (not fully supported).\ntype %s struct{}\n", name, sk.Kind, name)
@@ -510,6 +544,24 @@ func cloneStruct(s *ast.Struct) *ast.Struct {
 func cloneTypedef(t *ast.Typedef) *ast.Typedef {
 	c := *t
 	c.Type = cloneTypeRef(t.Type)
+	return &c
+}
+
+// cloneUnion deep-clones a union so that preprocessUnit can replace TypeRef values safely.
+func cloneUnion(u *ast.Union) *ast.Union {
+	c := *u
+	c.Discriminator = cloneTypeRef(u.Discriminator)
+	c.Cases = make([]ast.UnionCase, len(u.Cases))
+	for i, uc := range u.Cases {
+		c.Cases[i] = uc
+		c.Cases[i].Labels = append([]string(nil), uc.Labels...)
+		c.Cases[i].Type = cloneTypeRef(uc.Type)
+	}
+	if u.DefaultCase != nil {
+		dc := *u.DefaultCase
+		dc.Type = cloneTypeRef(dc.Type)
+		c.DefaultCase = &dc
+	}
 	return &c
 }
 

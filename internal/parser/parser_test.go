@@ -353,7 +353,7 @@ struct OK {
 	}
 }
 
-func TestParseSkippedUnionSwitch(t *testing.T) {
+func TestParseUnionWithEnumDiscriminator(t *testing.T) {
 	src := `
 enum MessageFilterTypeEnum {
     ALLFILTER_D,
@@ -383,16 +383,112 @@ struct MessageFilterType {
 	if len(file.Definitions) != 3 {
 		t.Fatalf("expected 3 definitions, got %d", len(file.Definitions))
 	}
-	skipped, ok := file.Definitions[1].(*ast.SkippedDecl)
+	u, ok := file.Definitions[1].(*ast.Union)
 	if !ok {
-		t.Fatalf("expected SkippedDecl, got %T", file.Definitions[1])
+		t.Fatalf("expected *ast.Union, got %T", file.Definitions[1])
 	}
-	if skipped.Kind != "union" || skipped.Name != "MessageFilterTypeUnion" {
-		t.Fatalf("unexpected skipped: %+v", skipped)
+	if u.Name != "MessageFilterTypeUnion" {
+		t.Fatalf("expected name 'MessageFilterTypeUnion', got %q", u.Name)
+	}
+	// Check discriminator is a NamedType referencing the enum
+	nt, ok := u.Discriminator.(*ast.NamedType)
+	if !ok {
+		t.Fatalf("expected NamedType discriminator, got %T", u.Discriminator)
+	}
+	if nt.Name != "MessageFilterTypeEnum" {
+		t.Fatalf("expected discriminator 'MessageFilterTypeEnum', got %q", nt.Name)
+	}
+	if len(u.Cases) != 3 {
+		t.Fatalf("expected 3 cases, got %d", len(u.Cases))
+	}
+	if u.Cases[0].Labels[0] != "ALLFILTER_D" || u.Cases[0].Name != "AllFilterVariant" {
+		t.Fatalf("unexpected case 0: %+v", u.Cases[0])
+	}
+	if u.DefaultCase != nil {
+		t.Fatal("expected no default case")
 	}
 	_, ok = file.Definitions[2].(*ast.Struct)
 	if !ok {
-		t.Fatalf("expected Struct after skipped union, got %T", file.Definitions[2])
+		t.Fatalf("expected Struct after union, got %T", file.Definitions[2])
+	}
+}
+
+func TestParseUnionWithIntegerDiscriminator(t *testing.T) {
+	src := `
+union Foo switch (long)
+{
+    case 1:
+        long bar;
+    case 2:
+        double baz;
+    default:
+        octet data;
+};
+`
+	p := NewParser("test.idl", []byte(src))
+	file, err := p.ParseFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Definitions) != 1 {
+		t.Fatalf("expected 1 definition, got %d", len(file.Definitions))
+	}
+	u, ok := file.Definitions[0].(*ast.Union)
+	if !ok {
+		t.Fatalf("expected *ast.Union, got %T", file.Definitions[0])
+	}
+	if u.Name != "Foo" {
+		t.Fatalf("expected name 'Foo', got %q", u.Name)
+	}
+	bt, ok := u.Discriminator.(*ast.BasicType)
+	if !ok {
+		t.Fatalf("expected BasicType discriminator, got %T", u.Discriminator)
+	}
+	if bt.Name != "int32" {
+		t.Fatalf("expected discriminator 'int32', got %q", bt.Name)
+	}
+	if len(u.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(u.Cases))
+	}
+	if u.Cases[0].Labels[0] != "1" || u.Cases[0].Name != "bar" {
+		t.Fatalf("unexpected case 0: %+v", u.Cases[0])
+	}
+	if u.Cases[1].Labels[0] != "2" || u.Cases[1].Name != "baz" {
+		t.Fatalf("unexpected case 1: %+v", u.Cases[1])
+	}
+	if u.DefaultCase == nil {
+		t.Fatal("expected default case")
+	}
+	if u.DefaultCase.Name != "data" {
+		t.Fatalf("expected default case name 'data', got %q", u.DefaultCase.Name)
+	}
+}
+
+func TestParseUnionMultipleLabels(t *testing.T) {
+	src := `
+union Multi switch (long)
+{
+    case 1:
+    case 2:
+        long val;
+    case 3:
+        double other;
+};
+`
+	p := NewParser("test.idl", []byte(src))
+	file, err := p.ParseFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := file.Definitions[0].(*ast.Union)
+	if len(u.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(u.Cases))
+	}
+	if len(u.Cases[0].Labels) != 2 || u.Cases[0].Labels[0] != "1" || u.Cases[0].Labels[1] != "2" {
+		t.Fatalf("expected labels [1, 2], got %v", u.Cases[0].Labels)
+	}
+	if u.Cases[0].Name != "val" {
+		t.Fatalf("expected name 'val', got %q", u.Cases[0].Name)
 	}
 }
 

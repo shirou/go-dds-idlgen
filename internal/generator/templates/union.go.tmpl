@@ -1,0 +1,119 @@
+{{range $u := .Unions}}
+// {{unionInterfaceName $u}} is the sealed interface for {{pascalCase $u.Name}} variants.
+type {{unionInterfaceName $u}} interface {
+	{{unionInterfaceName $u}}()
+}
+
+// {{pascalCase $u.Name}} represents an IDL discriminated union.
+type {{pascalCase $u.Name}} struct {
+	Value {{unionInterfaceName $u}}
+}
+{{range $c := $u.Cases}}
+// {{unionCaseWrapperName $u $c}} is a union variant for {{pascalCase $u.Name}}.
+type {{unionCaseWrapperName $u $c}} struct {
+	Value {{goType $c.Type}}
+}
+
+func (*{{unionCaseWrapperName $u $c}}) {{unionInterfaceName $u}}() {}
+{{end}}
+{{- if $u.DefaultCase}}
+// {{unionCaseWrapperName $u $u.DefaultCase}} is the default variant for {{pascalCase $u.Name}}.
+type {{unionCaseWrapperName $u $u.DefaultCase}} struct {
+	Discriminator {{unionDefaultDiscriminatorGoType $u}}
+	Value {{goType $u.DefaultCase.Type}}
+}
+
+func (*{{unionCaseWrapperName $u $u.DefaultCase}}) {{unionInterfaceName $u}}() {}
+{{end}}
+
+// EncodeCDR serializes {{pascalCase $u.Name}} to CDR format.
+func (u *{{pascalCase $u.Name}}) EncodeCDR(enc *cdr.Encoder) error {
+	if u.Value == nil {
+		return fmt.Errorf("{{pascalCase $u.Name}}: nil union value")
+	}
+	switch v := u.Value.(type) {
+{{- range $c := $u.Cases}}
+	case *{{unionCaseWrapperName $u $c}}:
+		if err := enc.{{unionDiscriminatorWriteFunc $u}}({{unionDiscriminatorCastToWire $u}}({{unionCaseGoConstant $u (index $c.Labels 0)}})); err != nil {
+			return err
+		}
+{{- if isPrimitive $c.Type}}
+		if err := enc.{{cdrWriteFunc $c.Type}}(v.Value); err != nil {
+			return err
+		}
+{{- else}}
+		if err := v.Value.EncodeCDR(enc); err != nil {
+			return err
+		}
+{{- end}}
+{{- end}}
+{{- if $u.DefaultCase}}
+	case *{{unionCaseWrapperName $u $u.DefaultCase}}:
+		if err := enc.{{unionDiscriminatorWriteFunc $u}}(v.Discriminator); err != nil {
+			return err
+		}
+{{- if isPrimitive $u.DefaultCase.Type}}
+		if err := enc.{{cdrWriteFunc $u.DefaultCase.Type}}(v.Value); err != nil {
+			return err
+		}
+{{- else}}
+		if err := v.Value.EncodeCDR(enc); err != nil {
+			return err
+		}
+{{- end}}
+{{- end}}
+	default:
+		return fmt.Errorf("{{pascalCase $u.Name}}: unknown union variant %T", u.Value)
+	}
+	return nil
+}
+
+// DecodeCDR deserializes {{pascalCase $u.Name}} from CDR format.
+func (u *{{pascalCase $u.Name}}) DecodeCDR(dec *cdr.Decoder) error {
+	disc, err := dec.{{unionDiscriminatorReadFunc $u}}()
+	if err != nil {
+		return err
+	}
+	switch {{unionSwitchExpr $u}} {
+{{- range $c := $u.Cases}}
+{{- range $label := $c.Labels}}
+	case {{unionCaseGoConstant $u $label}}:
+{{- end}}
+		v := &{{unionCaseWrapperName $u $c}}{}
+{{- if isPrimitive $c.Type}}
+		val, err := dec.{{cdrReadFunc $c.Type}}()
+		if err != nil {
+			return err
+		}
+		v.Value = val
+{{- else}}
+		if err := v.Value.DecodeCDR(dec); err != nil {
+			return err
+		}
+{{- end}}
+		u.Value = v
+{{- end}}
+{{- if $u.DefaultCase}}
+	default:
+		v := &{{unionCaseWrapperName $u $u.DefaultCase}}{Discriminator: disc}
+{{- if isPrimitive $u.DefaultCase.Type}}
+		val, err := dec.{{cdrReadFunc $u.DefaultCase.Type}}()
+		if err != nil {
+			return err
+		}
+		v.Value = val
+{{- else}}
+		if err := v.Value.DecodeCDR(dec); err != nil {
+			return err
+		}
+{{- end}}
+		u.Value = v
+{{- else}}
+	default:
+		return fmt.Errorf("{{pascalCase $u.Name}}: unknown discriminator value %v", disc)
+{{- end}}
+	}
+	return nil
+}
+
+{{end}}

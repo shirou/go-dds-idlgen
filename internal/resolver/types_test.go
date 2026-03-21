@@ -304,6 +304,65 @@ func TestTypeResolver_ResolveTypedef(t *testing.T) {
 	}
 }
 
+func TestTypeResolver_ResolveUnion(t *testing.T) {
+	colorEnum := &ast.Enum{Name: "Color", Values: []ast.EnumValue{
+		{Name: "RED"},
+		{Name: "GREEN"},
+	}}
+	pointStruct := &ast.Struct{Name: "Point", Fields: []ast.Field{
+		{Name: "x", Type: &ast.BasicType{Name: "int32"}},
+	}}
+
+	file := &ast.File{
+		Name: "test.idl",
+		Definitions: []ast.Definition{
+			colorEnum,
+			pointStruct,
+			&ast.Union{
+				Name:          "MyUnion",
+				Discriminator: &ast.NamedType{Name: "Color"},
+				Cases: []ast.UnionCase{
+					{
+						Labels: []string{"RED"},
+						Type:   &ast.NamedType{Name: "Point"},
+						Name:   "pointVal",
+					},
+					{
+						Labels: []string{"GREEN"},
+						Type:   &ast.BasicType{Name: "int32"},
+						Name:   "intVal",
+					},
+				},
+			},
+		},
+	}
+
+	r := NewTypeResolver()
+	r.BuildScope(file)
+	err := r.Resolve(file)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	u := file.Definitions[2].(*ast.Union)
+	// discriminator resolved
+	discType := u.Discriminator.(*ast.NamedType)
+	if discType.Resolved != colorEnum {
+		t.Fatal("expected discriminator to be resolved to Color enum")
+	}
+	// case type resolved
+	caseType := u.Cases[0].Type.(*ast.NamedType)
+	if caseType.Resolved != pointStruct {
+		t.Fatal("expected case type to be resolved to Point struct")
+	}
+
+	// union itself is registered as a type
+	_, ok := r.Root().Types["MyUnion"]
+	if !ok {
+		t.Fatal("expected MyUnion to be registered in scope")
+	}
+}
+
 func TestTypeResolver_UnresolvedError(t *testing.T) {
 	file := &ast.File{
 		Name: "test.idl",

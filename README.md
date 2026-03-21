@@ -13,9 +13,9 @@ pub/sub data models.
 - `@optional` fields mapped to Go pointer types
 - `@key`, `@id`, `@extensibility` annotations
 - `sequence<T>` to `[]T`, fixed-length arrays to `[N]T`
-- `enum`, `typedef`, `const` support
+- `enum`, `typedef`, `const`, `union` support
 - `#include` resolution with cycle detection
-- Unknown constructs (`interface`, `union`, ...) are skipped with warnings
+- Unknown constructs (`interface`, ...) are skipped with warnings
 
 ## Installation
 
@@ -144,6 +144,95 @@ processed recursively.
 - `enum` -- mapped to `int32` with named constants
 - `typedef` -- mapped to Go type aliases
 - `const` -- mapped to Go constants
+- `union` -- discriminated unions mapped to a sealed interface pattern (see below)
+
+### Union Types
+
+IDL discriminated unions are mapped to Go using a sealed interface pattern.
+Each union case becomes a wrapper struct implementing a private interface.
+
+IDL definition:
+
+```idl
+module variant {
+
+    enum ShapeKind {
+        CIRCLE_D,
+        RECTANGLE_D,
+        TRIANGLE_D
+    };
+
+    struct CircleData {
+        double radius;
+    };
+
+    struct RectangleData {
+        double width;
+        double height;
+    };
+
+    union ShapeUnion switch (ShapeKind)
+    {
+        case CIRCLE_D:
+            CircleData circleVariant;
+        case RECTANGLE_D:
+            RectangleData rectangleVariant;
+        case TRIANGLE_D:
+            long triangleVariant;
+    };
+
+};
+```
+
+Generated Go code:
+
+```go
+// ShapeUnionValue is the sealed interface for ShapeUnion variants.
+type ShapeUnionValue interface {
+	ShapeUnionValue()
+}
+
+type ShapeUnion struct {
+	Value ShapeUnionValue
+}
+
+type ShapeUnionCircleVariant struct {
+	Value CircleData
+}
+func (*ShapeUnionCircleVariant) ShapeUnionValue() {}
+
+type ShapeUnionRectangleVariant struct {
+	Value RectangleData
+}
+func (*ShapeUnionRectangleVariant) ShapeUnionValue() {}
+
+type ShapeUnionTriangleVariant struct {
+	Value int32
+}
+func (*ShapeUnionTriangleVariant) ShapeUnionValue() {}
+```
+
+Usage:
+
+```go
+shape := variant.ShapeUnion{
+    Value: &variant.ShapeUnionCircleVariant{
+        Value: variant.CircleData{Radius: 3.14},
+    },
+}
+
+switch v := shape.Value.(type) {
+case *variant.ShapeUnionCircleVariant:
+    fmt.Printf("Circle with radius %f\n", v.Value.Radius)
+case *variant.ShapeUnionRectangleVariant:
+    fmt.Printf("Rectangle %fx%f\n", v.Value.Width, v.Value.Height)
+case *variant.ShapeUnionTriangleVariant:
+    fmt.Printf("Triangle variant: %d\n", v.Value)
+}
+```
+
+Both enum and integer discriminators are supported. A `default` case is also
+supported, preserving the original discriminator value.
 
 ### Annotations
 
@@ -158,8 +247,8 @@ processed recursively.
 
 ### Skipped Constructs
 
-`interface`, `union`, `valuetype`, `bitset`, `bitmask` declarations are
-skipped with a warning. They may be supported in a future release.
+`interface`, `valuetype`, `bitset`, `bitmask` declarations are skipped with a
+warning. They may be supported in a future release.
 
 ## CDR Runtime
 
