@@ -2,10 +2,16 @@ package ast
 
 import "fmt"
 
+// Include represents a single #include directive.
+type Include struct {
+	Path   string // included file path
+	System bool   // true for angle-bracket includes (<...>), false for quoted ("...")
+}
+
 // File represents a parsed IDL file.
 type File struct {
 	Name        string       // source file name
-	Includes    []string     // #include paths
+	Includes    []Include    // #include directives
 	Definitions []Definition // top-level definitions (included + own)
 	OwnStart    int          // index where the file's own definitions begin
 }

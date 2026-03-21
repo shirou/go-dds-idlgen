@@ -192,12 +192,18 @@ struct Foo { long x; };
 	if len(file.Includes) != 2 {
 		t.Fatalf("expected 2 includes, got %d", len(file.Includes))
 	}
-	if file.Includes[0] != "base.idl" {
-		t.Fatalf("include 0: expected 'base.idl', got %q", file.Includes[0])
+	if file.Includes[0].Path != "base.idl" {
+		t.Fatalf("include 0: expected 'base.idl', got %q", file.Includes[0].Path)
+	}
+	if file.Includes[0].System {
+		t.Fatal("include 0: expected System=false for quoted include")
 	}
 	// Angle bracket includes may join tokens; check it contains the path.
-	if file.Includes[1] == "" {
+	if file.Includes[1].Path == "" {
 		t.Fatal("include 1 is empty")
+	}
+	if !file.Includes[1].System {
+		t.Fatal("include 1: expected System=true for angle-bracket include")
 	}
 }
 
@@ -572,7 +578,7 @@ module MyOrg {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(file.Includes) != 1 || file.Includes[0] != "base.idl" {
+	if len(file.Includes) != 1 || file.Includes[0].Path != "base.idl" {
 		t.Fatalf("expected 1 include 'base.idl', got %v", file.Includes)
 	}
 	if len(file.Definitions) != 1 {

@@ -223,6 +223,87 @@ struct Pixel {
 	}
 }
 
+func TestIncludedFiles_ExcludesInputAndSystem(t *testing.T) {
+	dir := t.TempDir()
+
+	// User include
+	writeFile(t, dir, "types.idl", `
+struct Color {
+	uint8 r;
+	uint8 g;
+	uint8 b;
+};
+`)
+	// System include (simulated)
+	writeFile(t, dir, "system.idl", `
+struct SysType { long x; };
+`)
+	// Main file with both user and system includes
+	writeFile(t, dir, "main.idl", `
+#include "types.idl"
+#include <system.idl>
+
+struct Pixel {
+	long x;
+	long y;
+};
+`)
+
+	r := NewIncludeResolver([]string{dir})
+	mainPath := filepath.Join(dir, "main.idl")
+	_, err := r.ResolveFile(mainPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	absMain, _ := filepath.Abs(mainPath)
+	inputPaths := map[string]bool{absMain: true}
+	included := r.IncludedFiles(inputPaths)
+
+	// Should only contain types.idl (not main.idl, not system.idl)
+	if len(included) != 1 {
+		t.Fatalf("expected 1 included file, got %d: %v", len(included), included)
+	}
+	if filepath.Base(included[0].Path) != "types.idl" {
+		t.Fatalf("expected types.idl, got %s", included[0].Path)
+	}
+}
+
+func TestIncludedFiles_Sorted(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFile(t, dir, "c.idl", `struct C { long x; };`)
+	writeFile(t, dir, "a.idl", `struct A { long x; };`)
+	writeFile(t, dir, "b.idl", `struct B { long x; };`)
+	writeFile(t, dir, "main.idl", `
+#include "c.idl"
+#include "a.idl"
+#include "b.idl"
+struct Main { long x; };
+`)
+
+	r := NewIncludeResolver(nil)
+	mainPath := filepath.Join(dir, "main.idl")
+	_, err := r.ResolveFile(mainPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	absMain, _ := filepath.Abs(mainPath)
+	included := r.IncludedFiles(map[string]bool{absMain: true})
+
+	if len(included) != 3 {
+		t.Fatalf("expected 3 included files, got %d", len(included))
+	}
+
+	// Verify sorted order
+	for i := 1; i < len(included); i++ {
+		if included[i-1].Path >= included[i].Path {
+			t.Fatalf("included files not sorted: %s >= %s", included[i-1].Path, included[i].Path)
+		}
+	}
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/shirou/go-dds-idlgen/internal/ast"
 	"github.com/shirou/go-dds-idlgen/internal/parser"
@@ -17,6 +18,8 @@ type IncludeResolver struct {
 	cache map[string]*ast.File
 	// inProgress tracks files currently being parsed to detect cycles.
 	inProgress map[string]bool
+	// systemPaths tracks absolute paths of system includes (angle-bracket).
+	systemPaths map[string]bool
 }
 
 // NewIncludeResolver creates a new IncludeResolver with the given include paths.
@@ -25,6 +28,7 @@ func NewIncludeResolver(includePaths []string) *IncludeResolver {
 		IncludePaths: includePaths,
 		cache:        make(map[string]*ast.File),
 		inProgress:   make(map[string]bool),
+		systemPaths:  make(map[string]bool),
 	}
 }
 
@@ -63,9 +67,13 @@ func (r *IncludeResolver) ResolveFile(path string) (*ast.File, error) {
 	baseDir := filepath.Dir(absPath)
 	var includedDefs []ast.Definition
 	for _, inc := range file.Includes {
-		incPath, err := r.findInclude(inc, baseDir)
+		incPath, err := r.findInclude(inc.Path, baseDir)
 		if err != nil {
-			return nil, fmt.Errorf("resolve include %q in %s: %w", inc, absPath, err)
+			return nil, fmt.Errorf("resolve include %q in %s: %w", inc.Path, absPath, err)
+		}
+
+		if inc.System {
+			r.systemPaths[incPath] = true
 		}
 
 		incFile, err := r.ResolveFile(incPath)
@@ -82,6 +90,32 @@ func (r *IncludeResolver) ResolveFile(path string) (*ast.File, error) {
 
 	r.cache[absPath] = file
 	return file, nil
+}
+
+// IncludedFiles returns the cached files that were resolved as non-system
+// includes, excluding the given input paths. The result is sorted by path
+// for deterministic processing order.
+func (r *IncludeResolver) IncludedFiles(inputPaths map[string]bool) []IncludedFile {
+	var files []IncludedFile
+	for absPath, file := range r.cache {
+		if inputPaths[absPath] {
+			continue
+		}
+		if r.systemPaths[absPath] {
+			continue
+		}
+		files = append(files, IncludedFile{Path: absPath, File: file})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Path < files[j].Path
+	})
+	return files
+}
+
+// IncludedFile pairs an absolute file path with its parsed AST.
+type IncludedFile struct {
+	Path string
+	File *ast.File
 }
 
 // findInclude searches for an include file in the include paths.

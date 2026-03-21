@@ -59,7 +59,7 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 	for p.tok.Kind != TokenEOF {
 		if p.tok.Kind == TokenHash {
 			inc := p.parseDirective()
-			if inc != "" {
+			if inc.Path != "" {
 				file.Includes = append(file.Includes, inc)
 			}
 			continue
@@ -84,11 +84,11 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 	return file, nil
 }
 
-func (p *Parser) parseDirective() string {
+func (p *Parser) parseDirective() ast.Include {
 	p.expect(TokenHash) // consume #
 	if p.tok.Kind != TokenIdent {
 		p.addError("expected directive name after '#'")
-		return ""
+		return ast.Include{}
 	}
 
 	switch p.tok.Value {
@@ -99,25 +99,25 @@ func (p *Parser) parseDirective() string {
 		if p.tok.Kind == TokenIdent {
 			p.next() // consume macro name
 		}
-		return ""
+		return ast.Include{}
 	case "endif":
 		p.next() // consume "endif"
-		return ""
+		return ast.Include{}
 	default:
 		p.addError(fmt.Sprintf("unsupported preprocessor directive #%s", p.tok.Value))
 		p.next()
-		return ""
+		return ast.Include{}
 	}
 }
 
-func (p *Parser) parseIncludeDirective() string {
+func (p *Parser) parseIncludeDirective() ast.Include {
 	p.next() // consume "include"
 
 	// Handle both "file.idl" and <file.idl>.
 	if p.tok.Kind == TokenStringLiteral {
 		val := p.tok.Value
 		p.next()
-		return val
+		return ast.Include{Path: val, System: false}
 	}
 	if p.tok.Kind == TokenLAngle {
 		// Read until matching >.
@@ -130,11 +130,11 @@ func (p *Parser) parseIncludeDirective() string {
 		if p.tok.Kind == TokenRAngle {
 			p.next()
 		}
-		return buf.String()
+		return ast.Include{Path: buf.String(), System: true}
 	}
 
 	p.addError("expected string literal or <...> after #include")
-	return ""
+	return ast.Include{}
 }
 
 func (p *Parser) parseAnnotations() []ast.Annotation {
