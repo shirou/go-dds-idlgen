@@ -95,10 +95,10 @@ func (r *IncludeResolver) ResolveFile(path string) (*ast.File, error) {
 // IncludedFiles returns the cached files that were resolved as non-system
 // includes, excluding the given input paths. The result is sorted by path
 // for deterministic processing order.
-func (r *IncludeResolver) IncludedFiles(inputPaths map[string]bool) []IncludedFile {
+func (r *IncludeResolver) IncludedFiles(excludePaths map[string]bool) []IncludedFile {
 	var files []IncludedFile
 	for absPath, file := range r.cache {
-		if inputPaths[absPath] {
+		if excludePaths[absPath] {
 			continue
 		}
 		if r.systemPaths[absPath] {

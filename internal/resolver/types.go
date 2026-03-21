@@ -187,3 +187,10 @@ func (r *TypeResolver) resolveTypeRef(scope *Scope, ref *ast.TypeRef) error {
 func (r *TypeResolver) Root() *Scope {
 	return r.root
 }
+
+// ResolveTypes builds a scope tree and resolves all NamedType references in the file.
+func ResolveTypes(file *ast.File) error {
+	tr := NewTypeResolver()
+	tr.BuildScope(file)
+	return tr.Resolve(file)
+}

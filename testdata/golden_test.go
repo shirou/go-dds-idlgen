@@ -166,9 +166,7 @@ func TestGoldenFiles(t *testing.T) {
 			}
 
 			// Resolve types so that NamedType references are linked.
-			typeResolver := resolver.NewTypeResolver()
-			typeResolver.BuildScope(file)
-			if err := typeResolver.Resolve(file); err != nil {
+			if err := resolver.ResolveTypes(file); err != nil {
 				t.Fatalf("resolve types: %v", err)
 			}
 

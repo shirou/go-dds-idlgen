@@ -126,9 +126,7 @@ func main() {
 
 // processFile resolves types and generates code for an IDL file.
 func processFile(file *ast.File, gen *generator.Generator) error {
-	typeResolver := resolver.NewTypeResolver()
-	typeResolver.BuildScope(file)
-	if err := typeResolver.Resolve(file); err != nil {
+	if err := resolver.ResolveTypes(file); err != nil {
 		return fmt.Errorf("resolve types: %w", err)
 	}
 	if err := gen.Generate(file); err != nil {
