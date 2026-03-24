@@ -1,0 +1,10 @@
+{{range .Structs}}
+// {{pascalCase .Name}}TypeInfo contains the XTypes TypeInformation
+// for DDS type matching during discovery.
+var {{pascalCase .Name}}TypeInfo = {{structTypeInfoBytes $.TypeInfoCtx . $.ModulePath}}
+{{end}}
+{{- range .Unions}}
+// {{pascalCase .Name}}TypeInfo contains the XTypes TypeInformation
+// for DDS type matching during discovery.
+var {{pascalCase .Name}}TypeInfo = {{unionTypeInfoBytes $.TypeInfoCtx . $.ModulePath}}
+{{end}}

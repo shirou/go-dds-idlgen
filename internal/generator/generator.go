@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/shirou/go-dds-idlgen/internal/ast"
+	"github.com/shirou/go-dds-idlgen/internal/xtypes"
 )
 
 //go:embed templates/*.go.tmpl
@@ -36,6 +37,7 @@ type genUnit struct {
 	Typedefs    []*ast.Typedef
 	Consts      []*ast.Const
 	Skipped     []*ast.SkippedDecl // skipped declarations to emit as placeholders
+	TypeInfoCtx *xtypes.ComputeContext // shared across all types in a unit
 }
 
 // pkgImport represents a Go import for a cross-package type reference.
@@ -101,6 +103,8 @@ func New(cfg Config) (*Generator, error) {
 		"lower":             strings.ToLower,
 		"upper":             strings.ToUpper,
 		"add":               func(a, b int) int { return a + b },
+		"structTypeInfoBytes": structTypeInfoBytes,
+		"unionTypeInfoBytes":  unionTypeInfoBytes,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.go.tmpl")
@@ -518,6 +522,14 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 					return nil, fmt.Errorf("execute marshal_mutable template: %w", err)
 				}
 			}
+		}
+	}
+
+	// Render TypeInfo variables for structs and unions
+	if len(unit.Structs) > 0 || len(unit.Unions) > 0 {
+		unit.TypeInfoCtx = xtypes.NewComputeContext()
+		if err := g.templates.ExecuteTemplate(&buf, "typeinfo.go.tmpl", unit); err != nil {
+			return nil, fmt.Errorf("execute typeinfo template: %w", err)
 		}
 	}
 

@@ -1,0 +1,87 @@
+// Test IDL for TypeInformation byte comparison with Cyclone DDS.
+// Each struct exercises a different aspect of XTypes TypeIdentifier computation.
+
+module test {
+
+    // 1. Simple struct with only primitive fields (FINAL, default)
+    @final
+    struct SimpleType {
+        long id;
+        double value;
+        string name;
+    };
+
+    // 2. Struct matching the main project's SensorData
+    @final
+    struct SensorData {
+        @key
+        long sensor_id;
+        double temperature;
+        float humidity;
+        string location;
+        boolean active;
+    };
+
+    // 3. Struct with array field
+    @final
+    struct ArrayType {
+        octet uuid[16];
+        long count;
+    };
+
+    // 4. Struct with sequence field
+    @final
+    struct SequenceType {
+        sequence<double> values;
+        long length;
+    };
+
+    // 5. Enum type
+    enum Color {
+        RED,
+        GREEN,
+        BLUE
+    };
+
+    // 6. Struct with enum field
+    @final
+    struct EnumStruct {
+        Color color;
+        long intensity;
+    };
+
+    // 7. Nested struct
+    @final
+    struct InnerType {
+        long x;
+        long y;
+    };
+
+    @final
+    struct OuterType {
+        InnerType position;
+        double timestamp;
+    };
+
+    // 8. Appendable struct
+    @appendable
+    struct AppendableType {
+        long id;
+        string label;
+    };
+
+    // 9. Struct with optional field
+    @mutable
+    struct MutableType {
+        long id;
+        @optional string description;
+    };
+
+    // 10. Struct with bounded string
+    @final
+    struct BoundedStringType {
+        string<64> short_name;
+        string<1024> long_name;
+    };
+
+};

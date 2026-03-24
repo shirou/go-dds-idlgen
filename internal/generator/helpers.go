@@ -6,6 +6,7 @@ import (
 	"unicode"
 
 	"github.com/shirou/go-dds-idlgen/internal/ast"
+	"github.com/shirou/go-dds-idlgen/internal/xtypes"
 )
 
 // resolveUnderlying follows NamedType → Typedef chains for primitive typedefs.
@@ -574,6 +575,26 @@ func isNestedStruct(s *ast.Struct) bool {
 		}
 	}
 	return false
+}
+
+// structTypeInfoBytes computes the XTypes TypeInformation for a struct and
+// returns it as a Go []byte literal string for use in templates.
+func structTypeInfoBytes(ctx *xtypes.ComputeContext, s *ast.Struct, modulePath []string) string {
+	data, err := ctx.BuildTypeInformation(s, modulePath)
+	if err != nil {
+		return fmt.Sprintf("nil /* typeinfo error: %v */", err)
+	}
+	return xtypes.FormatByteLiteral(data)
+}
+
+// unionTypeInfoBytes computes the XTypes TypeInformation for a union and
+// returns it as a Go []byte literal string for use in templates.
+func unionTypeInfoBytes(ctx *xtypes.ComputeContext, u *ast.Union, modulePath []string) string {
+	data, err := ctx.BuildUnionTypeInformation(u, modulePath)
+	if err != nil {
+		return fmt.Sprintf("nil /* typeinfo error: %v */", err)
+	}
+	return xtypes.FormatByteLiteral(data)
 }
 
 // cdrSerializedSize returns the fixed serialized size for a type, or 0 if variable.
