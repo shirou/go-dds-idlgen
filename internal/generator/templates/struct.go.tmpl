@@ -5,4 +5,7 @@ type {{pascalCase .Name}} struct {
 	{{pascalCase .Name}} {{goFieldType .}}
 {{- end}}
 }
+
+// IsKeyed reports whether {{pascalCase .Name}} is a DDS keyed type.
+func (s *{{pascalCase .Name}}) IsKeyed() bool { return {{structHasKeyField .}} }
 {{end}}

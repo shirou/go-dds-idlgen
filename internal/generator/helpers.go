@@ -242,6 +242,16 @@ func isKey(f ast.Field) bool {
 	return hasAnnotation(f.Annotations, "key")
 }
 
+// structHasKeyField returns true if any field in the struct has @key annotation.
+func structHasKeyField(s *ast.Struct) bool {
+	for _, f := range s.Fields {
+		if isKey(f) {
+			return true
+		}
+	}
+	return false
+}
+
 // goFieldType returns the Go type for a field, wrapping in pointer if optional.
 func goFieldType(f ast.Field) string {
 	t := goType(f.Type)

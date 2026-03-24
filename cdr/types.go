@@ -111,3 +111,30 @@ type CDRDecoder interface {
 
 // MemberID is a 28-bit identifier for a member in PL_CDR2 (MUTABLE) encoding.
 type MemberID = uint32
+
+// DDSKeyField describes a single key field for DDS instance discrimination.
+// Offset is the byte offset from the start of the CDR payload (after the
+// 4-byte encapsulation header). Size is the serialized size in bytes.
+type DDSKeyField struct {
+	Offset   uint32
+	Size     uint32
+	TypeHint KeyTypeHint
+}
+
+// KeyTypeHint describes the semantic type of a key field.
+type KeyTypeHint byte
+
+const (
+	KeyOpaque KeyTypeHint = 0x00
+	KeyUUID   KeyTypeHint = 0x01
+	KeyInt32  KeyTypeHint = 0x02
+	KeyInt64  KeyTypeHint = 0x03
+	KeyString KeyTypeHint = 0x04
+)
+
+// Keyed is the interface implemented by DDS types that declare whether
+// they have key fields. Types with IsKeyed() == true are treated as
+// keyed topics in DDS (WITH_KEY).
+type Keyed interface {
+	IsKeyed() bool
+}

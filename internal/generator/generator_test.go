@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fmt"
 	"go/format"
 	"strings"
 	"testing"
@@ -953,6 +954,70 @@ func TestGenerate_NestedFalseStruct(t *testing.T) {
 	}
 	if !strings.Contains(src, "UnmarshalCDR") {
 		t.Errorf("@nested(FALSE) struct should have UnmarshalCDR:\n%s", src)
+	}
+}
+
+func TestGenerate_IsKeyed(t *testing.T) {
+	tests := []struct {
+		name       string
+		structDef  *ast.Struct
+		wantKeyed  bool
+	}{
+		{
+			name: "keyed struct returns true",
+			structDef: &ast.Struct{
+				Name: "GlobalPoseReportType",
+				Fields: []ast.Field{
+					{Name: "timestamp", Type: &ast.BasicType{Name: "uint64"}},
+					{Name: "source", Type: &ast.ArrayType{
+						ElemType: &ast.BasicType{Name: "octet"},
+						Size:     32,
+					}, Annotations: []ast.Annotation{{Name: "key"}}},
+				},
+			},
+			wantKeyed: true,
+		},
+		{
+			name: "non-keyed struct returns false",
+			structDef: &ast.Struct{
+				Name: "SimpleData",
+				Fields: []ast.Field{
+					{Name: "value", Type: &ast.BasicType{Name: "uint32"}},
+				},
+			},
+			wantKeyed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, err := New(Config{OutputDir: "/tmp/test"})
+			if err != nil {
+				t.Fatalf("New() error: %v", err)
+			}
+
+			file := &ast.File{
+				Name:        "test.idl",
+				Definitions: []ast.Definition{tt.structDef},
+			}
+
+			result, err := g.GenerateToBuffer(file)
+			if err != nil {
+				t.Fatalf("GenerateToBuffer() error: %v", err)
+			}
+
+			data, ok := result["."]
+			if !ok {
+				t.Fatal("expected output for '.' package path")
+			}
+
+			src := string(data)
+			typeName := pascalCase(tt.structDef.Name)
+			wantSnippet := fmt.Sprintf("func (s *%s) IsKeyed() bool { return %v }", typeName, tt.wantKeyed)
+			if !strings.Contains(src, wantSnippet) {
+				t.Errorf("expected %q in output:\n%s", wantSnippet, src)
+			}
+		})
 	}
 }
 

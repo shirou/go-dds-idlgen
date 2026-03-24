@@ -69,6 +69,7 @@ func New(cfg Config) (*Generator, error) {
 		"extensibility":     extensibility,
 		"isOptional":        isOptional,
 		"isKey":             isKey,
+		"structHasKeyField": structHasKeyField,
 		"cdrAlignment":      cdrAlignment,
 		"cdrWriteFunc":      cdrWriteFunc,
 		"cdrReadFunc":       cdrReadFunc,
