@@ -166,7 +166,7 @@ func (ctx *ComputeContext) computeStructTypeIdentifier(s *ast.Struct, fqn string
 			memberID = *f.ID
 		}
 
-		var memberFlags uint16 = MemberFlagTryConstruct1
+		memberFlags := MemberFlagTryConstruct1
 		if hasAnnotation(f.Annotations, "optional") {
 			memberFlags |= MemberFlagIsOptional
 		}
@@ -287,7 +287,7 @@ func (ctx *ComputeContext) computeUnionTypeIdentifier(u *ast.Union, fqn string, 
 			}
 		}
 
-		var memberFlags uint16 = MemberFlagTryConstruct1
+		memberFlags := MemberFlagTryConstruct1
 		if isDefault {
 			memberFlags |= MemberFlagIsDefault
 		}
@@ -783,7 +783,7 @@ func resolveUnderlying(t ast.TypeRef) ast.TypeRef {
 
 func parseLabelValue(label string) int32 {
 	var v int32
-	fmt.Sscanf(label, "%d", &v)
+	_, _ = fmt.Sscanf(label, "%d", &v)
 	return v
 }
 

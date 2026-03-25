@@ -24,7 +24,7 @@ func parseGoldenFile(t *testing.T, path string) []goldenEntry {
 	if err != nil {
 		t.Fatalf("open golden file: %v", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	var entries []goldenEntry
 	scanner := bufio.NewScanner(f)
@@ -133,9 +133,9 @@ func buildTestTypes() map[string]func(ctx *ComputeContext) ([]byte, error) {
 		},
 		"EnumStruct": func(ctx *ComputeContext) ([]byte, error) {
 			// Pre-compute Color enum
-			ctx.ComputeTypeIdentifier(
+			_, _ = ctx.ComputeTypeIdentifier(
 				&ast.NamedType{Name: "Color", Resolved: colorEnum}, scope)
-			ctx.ComputeCompleteTypeIdentifier(
+			_, _ = ctx.ComputeCompleteTypeIdentifier(
 				&ast.NamedType{Name: "Color", Resolved: colorEnum}, scope)
 
 			s := &ast.Struct{
@@ -150,9 +150,9 @@ func buildTestTypes() map[string]func(ctx *ComputeContext) ([]byte, error) {
 		},
 		"OuterType": func(ctx *ComputeContext) ([]byte, error) {
 			// Pre-compute InnerType
-			ctx.ComputeTypeIdentifier(
+			_, _ = ctx.ComputeTypeIdentifier(
 				&ast.NamedType{Name: "InnerType", Resolved: innerStruct}, scope)
-			ctx.ComputeCompleteTypeIdentifier(
+			_, _ = ctx.ComputeCompleteTypeIdentifier(
 				&ast.NamedType{Name: "InnerType", Resolved: innerStruct}, scope)
 
 			s := &ast.Struct{

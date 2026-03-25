@@ -1,3 +1,5 @@
+// All Encoder methods write to a bytes.Buffer and never return errors.
+//nolint:errcheck
 package xtypes
 
 import (
