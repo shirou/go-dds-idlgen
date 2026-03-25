@@ -217,20 +217,7 @@ func annotationValue(annotations []ast.Annotation, name, param string) string {
 // extensibility returns the extensibility kind for a struct (FINAL, APPENDABLE, MUTABLE).
 // Default is FINAL if not annotated.
 func extensibility(s *ast.Struct) string {
-	v := annotationValue(s.Annotations, "extensibility", "")
-	if v == "" {
-		if hasAnnotation(s.Annotations, "final") {
-			return "FINAL"
-		}
-		if hasAnnotation(s.Annotations, "appendable") {
-			return "APPENDABLE"
-		}
-		if hasAnnotation(s.Annotations, "mutable") {
-			return "MUTABLE"
-		}
-		return "FINAL"
-	}
-	return strings.ToUpper(v)
+	return ast.ResolveExtensibility(s.Annotations)
 }
 
 // isOptional checks if a field has @optional annotation.

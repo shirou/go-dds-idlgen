@@ -166,3 +166,40 @@ func (t *SequenceType) String() string {
 
 func (t *ArrayType) String() string { return fmt.Sprintf("%s[%d]", t.ElemType, t.Size) }
 func (t *NamedType) String() string { return t.Name }
+
+// Extensibility kind constants returned by ResolveExtensibility.
+const (
+	ExtFinal      = "FINAL"
+	ExtAppendable = "APPENDABLE"
+	ExtMutable    = "MUTABLE"
+)
+
+// ResolveExtensibility determines the extensibility kind from a list of
+// annotations. Per DDS-XTypes v1.3 (OMG formal/2020-02-04, Section
+// 7.2.2.4.4.4.8), the default when no annotation is present is APPENDABLE.
+func ResolveExtensibility(annotations []Annotation) string {
+	for _, a := range annotations {
+		switch a.Name {
+		case "final":
+			return ExtFinal
+		case "appendable":
+			return ExtAppendable
+		case "mutable":
+			return ExtMutable
+		case "extensibility":
+			v := a.Params["value"]
+			if v == "" {
+				v = a.Params[""]
+			}
+			switch v {
+			case "FINAL", "final":
+				return ExtFinal
+			case "APPENDABLE", "appendable":
+				return ExtAppendable
+			case "MUTABLE", "mutable":
+				return ExtMutable
+			}
+		}
+	}
+	return ExtAppendable
+}

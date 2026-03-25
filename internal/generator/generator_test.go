@@ -1052,7 +1052,7 @@ func TestGenerate_ExtractKeyFields(t *testing.T) {
 			},
 			wantSnippets: []string{
 				"func (s *StaticFirst) ExtractKeyFields(_ []byte) ([]cdr.DDSKeyField, error)",
-				"Offset: 0, Size: 4, TypeHint: cdr.KeyInt32",
+				"Offset: 4, Size: 4, TypeHint: cdr.KeyInt32",
 			},
 		},
 		{
@@ -1066,7 +1066,7 @@ func TestGenerate_ExtractKeyFields(t *testing.T) {
 				},
 			},
 			wantSnippets: []string{
-				"Offset: 4, Size: 16, TypeHint: cdr.KeyUUID",
+				"Offset: 8, Size: 16, TypeHint: cdr.KeyUUID",
 			},
 		},
 		{
@@ -1095,8 +1095,9 @@ func TestGenerate_ExtractKeyFields(t *testing.T) {
 			wantSnippets: []string{
 				"func (s *RuntimeOpt) ExtractKeyFields(data []byte) ([]cdr.DDSKeyField, error)",
 				"dec, err := cdr.NewDecoder(data)",
-				"dec.ReadBool()",   // optional present flag
-				"dec.ReadString()", // skip optional string
+				"dec.ReadDHeader()", // APPENDABLE DHEADER
+				"dec.ReadBool()",    // optional present flag
+				"dec.ReadString()",  // skip optional string
 				"@key field: source",
 			},
 			wantAbsent: []string{
@@ -1114,7 +1115,8 @@ func TestGenerate_ExtractKeyFields(t *testing.T) {
 				},
 			},
 			wantSnippets: []string{
-				"dec.Align(4)", // int32 needs 4-byte alignment
+				"dec.ReadDHeader()", // APPENDABLE DHEADER
+				"dec.Align(4)",      // int32 needs 4-byte alignment
 				"@key field: id",
 			},
 		},

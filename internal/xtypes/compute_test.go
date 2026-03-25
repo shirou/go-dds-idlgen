@@ -158,6 +158,9 @@ func TestStructWithAnnotations(t *testing.T) {
 	// Different extensibility should produce different hash
 	sFinal := &ast.Struct{
 		Name: "FinalType",
+		Annotations: []ast.Annotation{
+			{Name: "final"},
+		},
 		Fields: []ast.Field{
 			{Name: "x", Type: &ast.BasicType{Name: "int32"}},
 		},

@@ -725,25 +725,23 @@ func makeArrayTID(size int, elemTID *TypeIdentifier, kind byte) *TypeIdentifier 
 }
 
 func structFlags(s *ast.Struct) uint16 {
-	var flags uint16
-	if hasAnnotation(s.Annotations, "mutable") || annotationValue(s.Annotations, "extensibility") == "MUTABLE" {
-		flags = TypeFlagIsMutable
-	} else if hasAnnotation(s.Annotations, "appendable") || annotationValue(s.Annotations, "extensibility") == "APPENDABLE" {
-		flags = TypeFlagIsAppendable
-	} else {
-		flags = TypeFlagIsFinal
-	}
-	return flags
+	return extToFlag(ast.ResolveExtensibility(s.Annotations))
 }
 
 func unionFlags(u *ast.Union) uint16 {
-	if hasAnnotation(u.Annotations, "mutable") || annotationValue(u.Annotations, "extensibility") == "MUTABLE" {
+	return extToFlag(ast.ResolveExtensibility(u.Annotations))
+}
+
+// extToFlag maps an extensibility string to the corresponding TypeFlag.
+func extToFlag(ext string) uint16 {
+	switch ext {
+	case ast.ExtMutable:
 		return TypeFlagIsMutable
-	}
-	if hasAnnotation(u.Annotations, "appendable") || annotationValue(u.Annotations, "extensibility") == "APPENDABLE" {
+	case ast.ExtFinal:
+		return TypeFlagIsFinal
+	default:
 		return TypeFlagIsAppendable
 	}
-	return TypeFlagIsFinal
 }
 
 func hasAnnotation(annotations []ast.Annotation, name string) bool {
@@ -753,20 +751,6 @@ func hasAnnotation(annotations []ast.Annotation, name string) bool {
 		}
 	}
 	return false
-}
-
-func annotationValue(annotations []ast.Annotation, name string) string {
-	for _, a := range annotations {
-		if a.Name == name {
-			if v, ok := a.Params["value"]; ok {
-				return strings.ToUpper(v)
-			}
-			if v, ok := a.Params[""]; ok {
-				return strings.ToUpper(v)
-			}
-		}
-	}
-	return ""
 }
 
 func fullyQualifiedName(name string, scope []string) string {

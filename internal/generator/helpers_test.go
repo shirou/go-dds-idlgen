@@ -187,9 +187,9 @@ func TestExtensibility(t *testing.T) {
 		want string
 	}{
 		{
-			"default is FINAL",
+			"default is APPENDABLE",
 			&ast.Struct{Name: "Foo"},
-			"FINAL",
+			"APPENDABLE",
 		},
 		{
 			"explicit extensibility annotation",
@@ -684,8 +684,8 @@ func TestComputeKeyFields_Static(t *testing.T) {
 	if kf.FieldName != "id" {
 		t.Errorf("FieldName = %q, want %q", kf.FieldName, "id")
 	}
-	if kf.StaticOffset != 0 {
-		t.Errorf("StaticOffset = %d, want 0", kf.StaticOffset)
+	if kf.StaticOffset != 4 {
+		t.Errorf("StaticOffset = %d, want 4", kf.StaticOffset)
 	}
 	if kf.Size != 4 {
 		t.Errorf("Size = %d, want 4", kf.Size)
@@ -710,8 +710,8 @@ func TestComputeKeyFields_StaticLater(t *testing.T) {
 	if len(kfs) != 1 {
 		t.Fatalf("expected 1 key field, got %d", len(kfs))
 	}
-	if kfs[0].StaticOffset != 4 {
-		t.Errorf("StaticOffset = %d, want 4", kfs[0].StaticOffset)
+	if kfs[0].StaticOffset != 8 {
+		t.Errorf("StaticOffset = %d, want 8", kfs[0].StaticOffset)
 	}
 	if kfs[0].TypeHint != "KeyUUID" {
 		t.Errorf("TypeHint = %q, want %q", kfs[0].TypeHint, "KeyUUID")
