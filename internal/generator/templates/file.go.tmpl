@@ -3,7 +3,7 @@
 package {{.PackageName}}
 {{if or .Structs .Enums .Unions .Skipped .Typedefs .Imports}}
 import (
-{{- if .Unions}}
+{{- if or .Unions .NeedsRuntimeKeys}}
 	"fmt"
 {{- end}}
 {{- if or .Structs .Enums .Unions .Skipped .Typedefs}}

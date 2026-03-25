@@ -1021,6 +1021,160 @@ func TestGenerate_IsKeyed(t *testing.T) {
 	}
 }
 
+func TestGenerate_ExtractKeyFields(t *testing.T) {
+	tests := []struct {
+		name         string
+		structDef    *ast.Struct
+		wantSnippets []string
+		wantAbsent   []string
+	}{
+		{
+			name: "no key fields returns nil",
+			structDef: &ast.Struct{
+				Name: "NoKey",
+				Fields: []ast.Field{
+					{Name: "value", Type: &ast.BasicType{Name: "int32"}},
+				},
+			},
+			wantSnippets: []string{
+				"func (s *NoKey) ExtractKeyFields(_ []byte) ([]cdr.DDSKeyField, error)",
+				"return nil, nil",
+			},
+		},
+		{
+			name: "static key at first field",
+			structDef: &ast.Struct{
+				Name: "StaticFirst",
+				Fields: []ast.Field{
+					{Name: "id", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "key"}}},
+					{Name: "value", Type: &ast.BasicType{Name: "float"}},
+				},
+			},
+			wantSnippets: []string{
+				"func (s *StaticFirst) ExtractKeyFields(_ []byte) ([]cdr.DDSKeyField, error)",
+				"Offset: 0, Size: 4, TypeHint: cdr.KeyInt32",
+			},
+		},
+		{
+			name: "static key after fixed fields",
+			structDef: &ast.Struct{
+				Name: "StaticLater",
+				Fields: []ast.Field{
+					{Name: "header", Type: &ast.BasicType{Name: "int32"}},
+					{Name: "source", Type: &ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 16},
+						Annotations: []ast.Annotation{{Name: "key"}}},
+				},
+			},
+			wantSnippets: []string{
+				"Offset: 4, Size: 16, TypeHint: cdr.KeyUUID",
+			},
+		},
+		{
+			name: "appendable adds DHEADER offset",
+			structDef: &ast.Struct{
+				Name:        "AppendKeyed",
+				Annotations: []ast.Annotation{{Name: "appendable"}},
+				Fields: []ast.Field{
+					{Name: "id", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "key"}}},
+				},
+			},
+			wantSnippets: []string{
+				"Offset: 4, Size: 4, TypeHint: cdr.KeyInt32",
+			},
+		},
+		{
+			name: "runtime with optional before key",
+			structDef: &ast.Struct{
+				Name: "RuntimeOpt",
+				Fields: []ast.Field{
+					{Name: "name", Type: &ast.StringType{}, Annotations: []ast.Annotation{{Name: "optional"}}},
+					{Name: "source", Type: &ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 32},
+						Annotations: []ast.Annotation{{Name: "key"}}},
+				},
+			},
+			wantSnippets: []string{
+				"func (s *RuntimeOpt) ExtractKeyFields(data []byte) ([]cdr.DDSKeyField, error)",
+				"dec, err := cdr.NewDecoder(data)",
+				"dec.ReadBool()",    // optional present flag
+				"dec.ReadString()",  // skip optional string
+				"@key field: source",
+			},
+			wantAbsent: []string{
+				"ExtractKeyFields(_ []byte)", // should NOT have the static signature
+			},
+		},
+		{
+			name: "runtime with alignment padding",
+			structDef: &ast.Struct{
+				Name: "AlignTest",
+				Fields: []ast.Field{
+					{Name: "flags", Type: &ast.StringType{}}, // variable-size forces runtime
+					{Name: "id", Type: &ast.BasicType{Name: "int32"},
+						Annotations: []ast.Annotation{{Name: "key"}}},
+				},
+			},
+			wantSnippets: []string{
+				"dec.Align(4)", // int32 needs 4-byte alignment
+				"@key field: id",
+			},
+		},
+		{
+			name: "mutable uses EMHEADER scanning",
+			structDef: &ast.Struct{
+				Name:        "MutableKeyed",
+				Annotations: []ast.Annotation{{Name: "mutable"}},
+				Fields: []ast.Field{
+					{Name: "name", Type: &ast.StringType{}},
+					{Name: "id", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "key"}}},
+				},
+			},
+			wantSnippets: []string{
+				"func (s *MutableKeyed) ExtractKeyFields(data []byte) ([]cdr.DDSKeyField, error)",
+				"dec.ReadDHeader()",
+				"dec.ReadEMHeader()",
+				"cdr.EMFieldSize(lc, nextInt)",
+				"@key id",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g, err := New(Config{OutputDir: "/tmp/test"})
+			if err != nil {
+				t.Fatalf("New() error: %v", err)
+			}
+
+			file := &ast.File{
+				Name:        "test.idl",
+				Definitions: []ast.Definition{tt.structDef},
+			}
+
+			result, err := g.GenerateToBuffer(file)
+			if err != nil {
+				t.Fatalf("GenerateToBuffer() error: %v", err)
+			}
+
+			data, ok := result["."]
+			if !ok {
+				t.Fatal("expected output for '.' package path")
+			}
+
+			src := string(data)
+			for _, snippet := range tt.wantSnippets {
+				if !strings.Contains(src, snippet) {
+					t.Errorf("expected %q in output:\n%s", snippet, src)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(src, absent) {
+					t.Errorf("did NOT expect %q in output:\n%s", absent, src)
+				}
+			}
+		})
+	}
+}
+
 func TestGenerate_EmptyFile(t *testing.T) {
 	g, err := New(Config{OutputDir: "/tmp/test"})
 	if err != nil {

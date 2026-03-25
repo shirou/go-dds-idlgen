@@ -440,3 +440,400 @@ func TestEnumComputedValue(t *testing.T) {
 		}
 	}
 }
+
+func TestCdrSerializedSizeRec(t *testing.T) {
+	// Basic types
+	if got := cdrSerializedSizeRec(&ast.BasicType{Name: "int32"}, nil); got != 4 {
+		t.Errorf("int32 size = %d, want 4", got)
+	}
+	if got := cdrSerializedSizeRec(&ast.BasicType{Name: "octet"}, nil); got != 1 {
+		t.Errorf("octet size = %d, want 1", got)
+	}
+
+	// String is variable
+	if got := cdrSerializedSizeRec(&ast.StringType{}, nil); got != 0 {
+		t.Errorf("string size = %d, want 0", got)
+	}
+
+	// Fixed array
+	if got := cdrSerializedSizeRec(&ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 16}, nil); got != 16 {
+		t.Errorf("octet[16] size = %d, want 16", got)
+	}
+
+	// Enum via NamedType
+	enumDef := &ast.Enum{Name: "Color", Values: []ast.EnumValue{{Name: "RED"}}}
+	nt := &ast.NamedType{Name: "Color", Resolved: enumDef}
+	if got := cdrSerializedSizeRec(nt, nil); got != 4 {
+		t.Errorf("enum size = %d, want 4", got)
+	}
+
+	// Fixed-size struct via NamedType
+	innerStruct := &ast.Struct{
+		Name: "Point",
+		Fields: []ast.Field{
+			{Name: "x", Type: &ast.BasicType{Name: "float"}},
+			{Name: "y", Type: &ast.BasicType{Name: "float"}},
+		},
+	}
+	ntStruct := &ast.NamedType{Name: "Point", Resolved: innerStruct}
+	if got := cdrSerializedSizeRec(ntStruct, nil); got != 8 {
+		t.Errorf("Point struct size = %d, want 8", got)
+	}
+
+	// Struct with optional field -> variable
+	optStruct := &ast.Struct{
+		Name: "Opt",
+		Fields: []ast.Field{
+			{Name: "x", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "optional"}}},
+		},
+	}
+	ntOpt := &ast.NamedType{Name: "Opt", Resolved: optStruct}
+	if got := cdrSerializedSizeRec(ntOpt, nil); got != 0 {
+		t.Errorf("optional struct size = %d, want 0", got)
+	}
+
+	// Struct with string field -> variable
+	strStruct := &ast.Struct{
+		Name: "Msg",
+		Fields: []ast.Field{
+			{Name: "text", Type: &ast.StringType{}},
+		},
+	}
+	ntStr := &ast.NamedType{Name: "Msg", Resolved: strStruct}
+	if got := cdrSerializedSizeRec(ntStr, nil); got != 0 {
+		t.Errorf("string-field struct size = %d, want 0", got)
+	}
+
+	// Struct with inheritance -> variable (can't resolve base)
+	inheritStruct := &ast.Struct{
+		Name:     "Derived",
+		Inherits: "Base",
+		Fields: []ast.Field{
+			{Name: "z", Type: &ast.BasicType{Name: "int32"}},
+		},
+	}
+	ntInherit := &ast.NamedType{Name: "Derived", Resolved: inheritStruct}
+	if got := cdrSerializedSizeRec(ntInherit, nil); got != 0 {
+		t.Errorf("inherited struct size = %d, want 0", got)
+	}
+}
+
+func TestCanStaticOffset(t *testing.T) {
+	fields := []ast.Field{
+		{Name: "a", Type: &ast.BasicType{Name: "int32"}},
+		{Name: "b", Type: &ast.BasicType{Name: "octet"}},
+		{Name: "c", Type: &ast.BasicType{Name: "int16"}},
+	}
+
+	// All fixed fields before index 2
+	if !canStaticOffset(fields, 2) {
+		t.Error("expected canStaticOffset(fields, 2) = true")
+	}
+	if !canStaticOffset(fields, 0) {
+		t.Error("expected canStaticOffset(fields, 0) = true for first field")
+	}
+
+	// With optional field
+	fieldsOpt := []ast.Field{
+		{Name: "a", Type: &ast.BasicType{Name: "int32"}},
+		{Name: "b", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "optional"}}},
+		{Name: "c", Type: &ast.BasicType{Name: "int32"}},
+	}
+	if canStaticOffset(fieldsOpt, 2) {
+		t.Error("expected canStaticOffset = false with optional before target")
+	}
+	if !canStaticOffset(fieldsOpt, 1) {
+		t.Error("expected canStaticOffset(fieldsOpt, 1) = true (optional is at index 1)")
+	}
+
+	// With string field (variable size)
+	fieldsStr := []ast.Field{
+		{Name: "name", Type: &ast.StringType{}},
+		{Name: "id", Type: &ast.BasicType{Name: "int32"}},
+	}
+	if canStaticOffset(fieldsStr, 1) {
+		t.Error("expected canStaticOffset = false with string before target")
+	}
+}
+
+func TestStaticOffset(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields []ast.Field
+		upTo   int
+		want   int
+	}{
+		{
+			"first field",
+			[]ast.Field{
+				{Name: "a", Type: &ast.BasicType{Name: "int32"}},
+			},
+			0,
+			0,
+		},
+		{
+			"second field after int32",
+			[]ast.Field{
+				{Name: "a", Type: &ast.BasicType{Name: "int32"}},
+				{Name: "b", Type: &ast.BasicType{Name: "int32"}},
+			},
+			1,
+			4,
+		},
+		{
+			"alignment: octet then int32",
+			[]ast.Field{
+				{Name: "a", Type: &ast.BasicType{Name: "octet"}},
+				{Name: "b", Type: &ast.BasicType{Name: "int32"}},
+			},
+			1,
+			4, // 1 byte + 3 padding
+		},
+		{
+			"alignment: int32 then octet then int16",
+			[]ast.Field{
+				{Name: "a", Type: &ast.BasicType{Name: "int32"}},
+				{Name: "b", Type: &ast.BasicType{Name: "octet"}},
+				{Name: "c", Type: &ast.BasicType{Name: "int16"}},
+			},
+			2,
+			6, // 4 + 1 + 1(pad) = 6
+		},
+		{
+			"array of octets",
+			[]ast.Field{
+				{Name: "data", Type: &ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 32}},
+				{Name: "id", Type: &ast.BasicType{Name: "int32"}},
+			},
+			1,
+			32, // 32 bytes, already 4-aligned
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := staticOffset(tt.fields, tt.upTo)
+			if got != tt.want {
+				t.Errorf("staticOffset = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestKeyTypeHint(t *testing.T) {
+	tests := []struct {
+		typ  ast.TypeRef
+		want string
+	}{
+		{&ast.BasicType{Name: "int32"}, "KeyInt32"},
+		{&ast.BasicType{Name: "long"}, "KeyInt32"},
+		{&ast.BasicType{Name: "uint32"}, "KeyInt32"},
+		{&ast.BasicType{Name: "int64"}, "KeyInt64"},
+		{&ast.BasicType{Name: "uint64"}, "KeyInt64"},
+		{&ast.StringType{}, "KeyString"},
+		{&ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 16}, "KeyUUID"},
+		{&ast.ArrayType{ElemType: &ast.BasicType{Name: "uint8"}, Size: 16}, "KeyUUID"},
+		{&ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 32}, "KeyOpaque"},
+		{&ast.BasicType{Name: "float"}, "KeyOpaque"},
+		{&ast.BasicType{Name: "boolean"}, "KeyOpaque"},
+	}
+	for _, tt := range tests {
+		got := keyTypeHint(tt.typ)
+		if got != tt.want {
+			t.Errorf("keyTypeHint(%v) = %q, want %q", tt.typ, got, tt.want)
+		}
+	}
+}
+
+func TestComputeKeyFields_Static(t *testing.T) {
+	s := &ast.Struct{
+		Name: "Sensor",
+		Fields: []ast.Field{
+			{Name: "id", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "key"}}},
+			{Name: "value", Type: &ast.BasicType{Name: "float"}},
+		},
+	}
+
+	kfs := computeKeyFields(s)
+	if len(kfs) != 1 {
+		t.Fatalf("expected 1 key field, got %d", len(kfs))
+	}
+	kf := kfs[0]
+	if kf.FieldName != "id" {
+		t.Errorf("FieldName = %q, want %q", kf.FieldName, "id")
+	}
+	if kf.StaticOffset != 0 {
+		t.Errorf("StaticOffset = %d, want 0", kf.StaticOffset)
+	}
+	if kf.Size != 4 {
+		t.Errorf("Size = %d, want 4", kf.Size)
+	}
+	if kf.TypeHint != "KeyInt32" {
+		t.Errorf("TypeHint = %q, want %q", kf.TypeHint, "KeyInt32")
+	}
+}
+
+func TestComputeKeyFields_StaticLater(t *testing.T) {
+	// @key is not the first field but all preceding fields are fixed
+	s := &ast.Struct{
+		Name: "Msg",
+		Fields: []ast.Field{
+			{Name: "header", Type: &ast.BasicType{Name: "int32"}},
+			{Name: "source", Type: &ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 16},
+				Annotations: []ast.Annotation{{Name: "key"}}},
+		},
+	}
+
+	kfs := computeKeyFields(s)
+	if len(kfs) != 1 {
+		t.Fatalf("expected 1 key field, got %d", len(kfs))
+	}
+	if kfs[0].StaticOffset != 4 {
+		t.Errorf("StaticOffset = %d, want 4", kfs[0].StaticOffset)
+	}
+	if kfs[0].TypeHint != "KeyUUID" {
+		t.Errorf("TypeHint = %q, want %q", kfs[0].TypeHint, "KeyUUID")
+	}
+}
+
+func TestComputeKeyFields_RuntimeOptional(t *testing.T) {
+	// @optional before @key forces runtime
+	s := &ast.Struct{
+		Name: "Msg",
+		Fields: []ast.Field{
+			{Name: "name", Type: &ast.StringType{}, Annotations: []ast.Annotation{{Name: "optional"}}},
+			{Name: "source", Type: &ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 32},
+				Annotations: []ast.Annotation{{Name: "key"}}},
+		},
+	}
+
+	kfs := computeKeyFields(s)
+	if len(kfs) != 1 {
+		t.Fatalf("expected 1 key field, got %d", len(kfs))
+	}
+	if kfs[0].StaticOffset != -1 {
+		t.Errorf("StaticOffset = %d, want -1 (runtime)", kfs[0].StaticOffset)
+	}
+}
+
+func TestComputeKeyFields_Mutable(t *testing.T) {
+	// MUTABLE always requires runtime
+	s := &ast.Struct{
+		Name: "Msg",
+		Annotations: []ast.Annotation{{Name: "mutable"}},
+		Fields: []ast.Field{
+			{Name: "id", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "key"}}},
+		},
+	}
+
+	kfs := computeKeyFields(s)
+	if len(kfs) != 1 {
+		t.Fatalf("expected 1 key field, got %d", len(kfs))
+	}
+	if kfs[0].StaticOffset != -1 {
+		t.Errorf("StaticOffset = %d, want -1 (runtime)", kfs[0].StaticOffset)
+	}
+}
+
+func TestComputeKeyFields_Appendable(t *testing.T) {
+	// APPENDABLE adds 4 bytes for DHEADER
+	s := &ast.Struct{
+		Name:        "Msg",
+		Annotations: []ast.Annotation{{Name: "appendable"}},
+		Fields: []ast.Field{
+			{Name: "id", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "key"}}},
+		},
+	}
+
+	kfs := computeKeyFields(s)
+	if len(kfs) != 1 {
+		t.Fatalf("expected 1 key field, got %d", len(kfs))
+	}
+	if kfs[0].StaticOffset != 4 {
+		t.Errorf("StaticOffset = %d, want 4 (DHEADER)", kfs[0].StaticOffset)
+	}
+}
+
+func TestComputeKeyFields_NoKey(t *testing.T) {
+	s := &ast.Struct{
+		Name: "Simple",
+		Fields: []ast.Field{
+			{Name: "x", Type: &ast.BasicType{Name: "int32"}},
+		},
+	}
+	kfs := computeKeyFields(s)
+	if len(kfs) != 0 {
+		t.Errorf("expected 0 key fields, got %d", len(kfs))
+	}
+}
+
+func TestAllFields_NoInheritance(t *testing.T) {
+	s := &ast.Struct{
+		Name: "Simple",
+		Fields: []ast.Field{
+			{Name: "a", Type: &ast.BasicType{Name: "int32"}},
+		},
+	}
+	fields, resolved := allFields(s)
+	if !resolved {
+		t.Error("expected resolved=true for non-inherited struct")
+	}
+	if len(fields) != 1 {
+		t.Errorf("expected 1 field, got %d", len(fields))
+	}
+}
+
+func TestAllFields_WithInheritance(t *testing.T) {
+	s := &ast.Struct{
+		Name:     "Derived",
+		Inherits: "Base",
+		Fields: []ast.Field{
+			{Name: "z", Type: &ast.BasicType{Name: "int32"}},
+		},
+	}
+	fields, resolved := allFields(s)
+	if resolved {
+		t.Error("expected resolved=false for inherited struct (base not resolved)")
+	}
+	if len(fields) != 1 {
+		t.Errorf("expected 1 field (own only), got %d", len(fields))
+	}
+}
+
+func TestEmFieldSize(t *testing.T) {
+	tests := []struct {
+		lc      uint8
+		nextInt uint32
+		want    uint32
+	}{
+		{0, 0, 1},
+		{1, 0, 2},
+		{2, 0, 4},
+		{3, 0, 8},
+		{4, 100, 100},
+		{5, 200, 200},
+		{6, 300, 300},
+		{7, 400, 400},
+	}
+	for _, tt := range tests {
+		got := emFieldSize(tt.lc, tt.nextInt)
+		if got != tt.want {
+			t.Errorf("emFieldSize(%d, %d) = %d, want %d", tt.lc, tt.nextInt, got, tt.want)
+		}
+	}
+}
+
+func TestNeedsRuntimeKeyExtract(t *testing.T) {
+	static := []keyFieldInfo{{StaticOffset: 0}, {StaticOffset: 4}}
+	if needsRuntimeKeyExtract(static) {
+		t.Error("expected false for all-static key fields")
+	}
+
+	runtime := []keyFieldInfo{{StaticOffset: 0}, {StaticOffset: -1}}
+	if !needsRuntimeKeyExtract(runtime) {
+		t.Error("expected true when any key field needs runtime")
+	}
+
+	if needsRuntimeKeyExtract(nil) {
+		t.Error("expected false for nil key fields")
+	}
+}

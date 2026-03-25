@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/shirou/go-dds-idlgen/cdr"
 	"github.com/shirou/go-dds-idlgen/internal/ast"
 	"github.com/shirou/go-dds-idlgen/internal/xtypes"
 )
@@ -609,6 +610,13 @@ func unionTypeInfoBytes(ctx *xtypes.ComputeContext, u *ast.Union, modulePath []s
 
 // cdrSerializedSize returns the fixed serialized size for a type, or 0 if variable.
 func cdrSerializedSize(t ast.TypeRef) int {
+	return cdrSerializedSizeRec(t, nil)
+}
+
+// cdrSerializedSizeRec returns the fixed serialized size for a type, or 0 if variable.
+// It recursively resolves NamedTypes (structs, enums, typedefs).
+// visited prevents infinite recursion on circular struct references.
+func cdrSerializedSizeRec(t ast.TypeRef, visited map[*ast.Struct]bool) int {
 	t = resolveUnderlying(t)
 	switch v := t.(type) {
 	case *ast.BasicType:
@@ -623,10 +631,248 @@ func cdrSerializedSize(t ast.TypeRef) int {
 			return 8
 		}
 	case *ast.ArrayType:
-		elemSize := cdrSerializedSize(v.ElemType)
+		elemSize := cdrSerializedSizeRec(v.ElemType, visited)
 		if elemSize > 0 {
 			return elemSize * v.Size
 		}
+	case *ast.NamedType:
+		if v.Resolved == nil {
+			return 0
+		}
+		switch r := v.Resolved.(type) {
+		case *ast.Enum:
+			return 4 // CDR enums are uint32
+		case *ast.Struct:
+			if visited == nil {
+				visited = make(map[*ast.Struct]bool)
+			}
+			if visited[r] {
+				return 0 // circular reference
+			}
+			visited[r] = true
+			return structFixedSize(r, visited)
+		}
 	}
-	return 0 // variable size
+	return 0 // variable size (string, sequence, etc.)
+}
+
+// structFixedSize returns the total serialized size of a FINAL struct
+// if all fields are fixed-size. Returns 0 if any field is variable-size
+// or if the struct has optional fields.
+func structFixedSize(s *ast.Struct, visited map[*ast.Struct]bool) int {
+	// Inherited fields come first but we can't resolve them here without
+	// the full AST context. If the struct inherits, treat as variable.
+	if s.Inherits != "" {
+		return 0
+	}
+	pos := 0
+	for _, f := range s.Fields {
+		if isOptional(f) {
+			return 0
+		}
+		align := cdrAlignment(f.Type)
+		rem := pos % align
+		if rem != 0 {
+			pos += align - rem
+		}
+		size := cdrSerializedSizeRec(f.Type, visited)
+		if size == 0 {
+			return 0
+		}
+		pos += size
+	}
+	return pos
+}
+
+// keyFieldInfo holds code generation info for a single @key field.
+type keyFieldInfo struct {
+	FieldName    string
+	StaticOffset int    // >= 0: statically computed, -1: needs runtime scan
+	Size         int    // fixed serialized size (0 = variable)
+	TypeHint     string // "KeyOpaque", "KeyInt32", etc.
+	MemberID     int    // for MUTABLE extensibility
+	FieldIndex   int    // declaration order index (including inherited fields)
+}
+
+// computeKeyFields computes offset information for all @key fields in a struct.
+// If the struct inherits from a base type, inherited fields are included.
+func computeKeyFields(s *ast.Struct) []keyFieldInfo {
+	fields, resolved := allFields(s)
+	ext := extensibility(s)
+
+	var result []keyFieldInfo
+	for i, f := range fields {
+		if !isKey(f) {
+			continue
+		}
+
+		kfi := keyFieldInfo{
+			FieldName:  f.Name,
+			Size:       cdrSerializedSizeRec(f.Type, nil),
+			TypeHint:   keyTypeHint(f.Type),
+			MemberID:   fieldMemberID(f, i),
+			FieldIndex: i,
+		}
+
+		if ext == "MUTABLE" || !resolved {
+			// MUTABLE: field order is not fixed, always runtime
+			// Unresolved base: can't compute static offsets
+			kfi.StaticOffset = -1
+		} else if canStaticOffset(fields, i) {
+			offset := staticOffset(fields, i)
+			if ext == "APPENDABLE" {
+				offset += 4 // DHEADER
+			}
+			kfi.StaticOffset = offset
+		} else {
+			kfi.StaticOffset = -1
+		}
+
+		result = append(result, kfi)
+	}
+	return result
+}
+
+// allFields returns all fields in declaration order (base → derived).
+// The second return value is false if the base type could not be resolved.
+//
+// Limitation: ast.Struct.Inherits is a string name, and the generator does
+// not currently have access to the resolver's type map. Therefore, when a
+// struct inherits from a base type, this function always returns
+// resolved=false, forcing runtime key extraction. To support static offsets
+// for inherited structs, the resolver would need to populate a pointer to
+// the base *ast.Struct (similar to NamedType.Resolved).
+func allFields(s *ast.Struct) ([]ast.Field, bool) {
+	if s.Inherits == "" {
+		return s.Fields, true
+	}
+	return s.Fields, false
+}
+
+// canStaticOffset reports whether a static byte offset can be computed for
+// the field at index upTo. All preceding fields must be non-optional and
+// have a fixed serialized size.
+func canStaticOffset(fields []ast.Field, upTo int) bool {
+	for i := 0; i < upTo; i++ {
+		if isOptional(fields[i]) {
+			return false
+		}
+		if cdrSerializedSizeRec(fields[i].Type, nil) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// staticOffset computes the cumulative byte offset to the field at index upTo,
+// applying XCDR2 alignment rules (max 4 bytes).
+func staticOffset(fields []ast.Field, upTo int) int {
+	pos := 0
+	for i := 0; i < upTo; i++ {
+		align := cdrAlignment(fields[i].Type)
+		rem := pos % align
+		if rem != 0 {
+			pos += align - rem
+		}
+		pos += cdrSerializedSizeRec(fields[i].Type, nil)
+	}
+	// Align for the target field itself
+	if upTo < len(fields) {
+		align := cdrAlignment(fields[upTo].Type)
+		rem := pos % align
+		if rem != 0 {
+			pos += align - rem
+		}
+	}
+	return pos
+}
+
+// keyTypeHint returns the KeyTypeHint constant name for a type.
+func keyTypeHint(t ast.TypeRef) string {
+	t = resolveUnderlying(t)
+	switch v := t.(type) {
+	case *ast.BasicType:
+		switch v.Name {
+		case "int32", "long", "uint32":
+			return "KeyInt32"
+		case "int64", "uint64":
+			return "KeyInt64"
+		}
+	case *ast.StringType:
+		return "KeyString"
+	case *ast.ArrayType:
+		if elem, ok := resolveUnderlying(v.ElemType).(*ast.BasicType); ok {
+			if (elem.Name == "octet" || elem.Name == "uint8") && v.Size == 16 {
+				return "KeyUUID"
+			}
+		}
+	}
+	return "KeyOpaque"
+}
+
+// needsRuntimeKeyExtract reports whether any key field requires runtime scanning.
+func needsRuntimeKeyExtract(keyFields []keyFieldInfo) bool {
+	for _, kf := range keyFields {
+		if kf.StaticOffset < 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// keyExtractFieldInfo holds per-field info for the key_extract template.
+type keyExtractFieldInfo struct {
+	Name        string
+	IsKey       bool
+	IsOptional  bool
+	IsString    bool
+	IsSequence  bool
+	IsCompound  bool // struct/union type needing DecodeCDR
+	FixedSize   int  // 0 = variable
+	Alignment   int
+	GoType      string
+	TypeHint    string
+	SeqElemSize int // fixed element size for sequences, 0 = variable
+}
+
+// buildKeyExtractFields builds the enriched field list for the key_extract template.
+func buildKeyExtractFields(s *ast.Struct) []keyExtractFieldInfo {
+	fields, _ := allFields(s)
+	result := make([]keyExtractFieldInfo, len(fields))
+	for i, f := range fields {
+		underlying := resolveUnderlying(f.Type)
+		info := keyExtractFieldInfo{
+			Name:       f.Name,
+			IsKey:      isKey(f),
+			IsOptional: isOptional(f),
+			IsString:   isString(f.Type),
+			IsSequence: isSequence(f.Type),
+			FixedSize:  cdrSerializedSizeRec(f.Type, nil),
+			Alignment:  cdrAlignment(f.Type),
+			GoType:     goType(f.Type),
+			TypeHint:   keyTypeHint(f.Type),
+		}
+
+		// Check if compound type (struct/union that has DecodeCDR)
+		if nt, ok := underlying.(*ast.NamedType); ok && nt.Resolved != nil {
+			switch nt.Resolved.(type) {
+			case *ast.Struct, *ast.Union:
+				info.IsCompound = true
+			}
+		}
+
+		// Sequence element size
+		if seq, ok := underlying.(*ast.SequenceType); ok {
+			info.SeqElemSize = cdrSerializedSizeRec(seq.ElemType, nil)
+		}
+
+		result[i] = info
+	}
+	return result
+}
+
+// emFieldSize delegates to cdr.EMFieldSize. Kept in generator package for
+// use in template FuncMap and tests.
+func emFieldSize(lc uint8, nextInt uint32) uint32 {
+	return cdr.EMFieldSize(lc, nextInt)
 }

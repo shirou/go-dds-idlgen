@@ -47,6 +47,13 @@ func (d *Decoder) align(n int) {
 	}
 }
 
+// Align advances the position to the next n-byte boundary, capped at 4
+// bytes per XCDR2 rules. This is the exported version of align for use
+// by generated code that scans CDR payloads (e.g., ExtractKeyFields).
+func (d *Decoder) Align(n int) {
+	d.align(n)
+}
+
 // checkRemaining returns an error if fewer than n bytes remain.
 func (d *Decoder) checkRemaining(n int) error {
 	if d.pos+n > len(d.data) {

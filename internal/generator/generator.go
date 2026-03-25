@@ -36,8 +36,9 @@ type genUnit struct {
 	Unions      []*ast.Union
 	Typedefs    []*ast.Typedef
 	Consts      []*ast.Const
-	Skipped     []*ast.SkippedDecl // skipped declarations to emit as placeholders
-	TypeInfoCtx *xtypes.ComputeContext // shared across all types in a unit
+	Skipped          []*ast.SkippedDecl    // skipped declarations to emit as placeholders
+	TypeInfoCtx      *xtypes.ComputeContext // shared across all types in a unit
+	NeedsRuntimeKeys bool                   // true if any struct needs runtime key extraction
 }
 
 // pkgImport represents a Go import for a cross-package type reference.
@@ -100,8 +101,11 @@ func New(cfg Config) (*Generator, error) {
 		"unionSwitchExpr":                  unionSwitchExpr,
 		"unionDefaultDiscriminatorGoType":  unionDefaultDiscriminatorGoType,
 		"unionHasDefaultCase":              unionHasDefaultCase,
-		"isNestedStruct":    isNestedStruct,
-		"lower":             strings.ToLower,
+		"isNestedStruct":          isNestedStruct,
+		"computeKeyFields":        computeKeyFields,
+		"needsRuntimeKeyExtract":  needsRuntimeKeyExtract,
+		"keyTypeHint":             keyTypeHint,
+		"lower":                   strings.ToLower,
 		"upper":             strings.ToUpper,
 		"add":               func(a, b int) int { return a + b },
 		"structTypeInfoBytes": structTypeInfoBytes,
@@ -452,6 +456,20 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 	// Resolve cross-package type references before rendering.
 	g.preprocessUnit(unit)
 
+	// Pre-compute key field info for all structs before rendering the file
+	// header, so that NeedsRuntimeKeys is set correctly for the import block.
+	var keyFieldsMap map[string][]keyFieldInfo
+	if len(unit.Structs) > 0 {
+		keyFieldsMap = make(map[string][]keyFieldInfo, len(unit.Structs))
+		for _, s := range unit.Structs {
+			kf := computeKeyFields(s)
+			keyFieldsMap[s.Name] = kf
+			if needsRuntimeKeyExtract(kf) {
+				unit.NeedsRuntimeKeys = true
+			}
+		}
+	}
+
 	var buf bytes.Buffer
 
 	// Render file header
@@ -497,6 +515,7 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 
 	// Render structs
 	if len(unit.Structs) > 0 {
+
 		if err := g.templates.ExecuteTemplate(&buf, "struct.go.tmpl", unit); err != nil {
 			return nil, fmt.Errorf("execute struct template: %w", err)
 		}
@@ -521,6 +540,20 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 			case "MUTABLE":
 				if err := g.templates.ExecuteTemplate(&buf, "marshal_mutable.go.tmpl", data); err != nil {
 					return nil, fmt.Errorf("execute marshal_mutable template: %w", err)
+				}
+			}
+
+			// Render runtime ExtractKeyFields if needed
+			keyFields := keyFieldsMap[s.Name]
+			if needsRuntimeKeyExtract(keyFields) {
+				keData := struct {
+					PackageName string
+					Struct      *ast.Struct
+					KeyFields   []keyFieldInfo
+					AllFields   []keyExtractFieldInfo
+				}{unit.PackageName, s, keyFields, buildKeyExtractFields(s)}
+				if err := g.templates.ExecuteTemplate(&buf, "key_extract.go.tmpl", keData); err != nil {
+					return nil, fmt.Errorf("execute key_extract template: %w", err)
 				}
 			}
 		}

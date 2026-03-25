@@ -8,4 +8,22 @@ type {{pascalCase .Name}} struct {
 
 // IsKeyed reports whether {{pascalCase .Name}} is a DDS keyed type.
 func (s *{{pascalCase .Name}}) IsKeyed() bool { return {{structHasKeyField .}} }
+{{- $keyFields := computeKeyFields .}}
+{{- if not (needsRuntimeKeyExtract $keyFields)}}
+
+// ExtractKeyFields returns the key field locations for {{pascalCase .Name}}.
+{{- if not $keyFields}}
+func (s *{{pascalCase .Name}}) ExtractKeyFields(_ []byte) ([]cdr.DDSKeyField, error) {
+	return nil, nil
+}
+{{- else}}
+func (s *{{pascalCase .Name}}) ExtractKeyFields(_ []byte) ([]cdr.DDSKeyField, error) {
+	return []cdr.DDSKeyField{
+{{- range $keyFields}}
+		{Offset: {{.StaticOffset}}, Size: {{.Size}}, TypeHint: cdr.{{.TypeHint}}},
+{{- end}}
+	}, nil
+}
+{{- end}}
+{{- end}}
 {{end}}

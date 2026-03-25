@@ -138,3 +138,30 @@ const (
 type Keyed interface {
 	IsKeyed() bool
 }
+
+// KeyFieldExtractor is the interface for DDS types that can extract key field
+// locations from serialized CDR data. The returned offsets are relative to
+// the CDR payload start (after the 4-byte encapsulation header).
+type KeyFieldExtractor interface {
+	ExtractKeyFields(data []byte) ([]DDSKeyField, error)
+}
+
+// EMFieldSize computes the field content size from an EMHEADER's length code
+// and NEXTINT value, per DDS-XTYPES spec 7.4.3.4.2.
+//
+//	LC 0: 1 byte, LC 1: 2 bytes, LC 2: 4 bytes, LC 3: 8 bytes
+//	LC 4..7: size is encoded in NEXTINT
+func EMFieldSize(lc uint8, nextInt uint32) uint32 {
+	switch lc {
+	case 0:
+		return 1
+	case 1:
+		return 2
+	case 2:
+		return 4
+	case 3:
+		return 8
+	default:
+		return nextInt
+	}
+}

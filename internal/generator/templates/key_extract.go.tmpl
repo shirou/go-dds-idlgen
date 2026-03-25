@@ -1,0 +1,153 @@
+
+// ExtractKeyFields scans the CDR payload to locate key fields for {{pascalCase .Struct.Name}}.
+func (s *{{pascalCase .Struct.Name}}) ExtractKeyFields(data []byte) ([]cdr.DDSKeyField, error) {
+	dec, err := cdr.NewDecoder(data)
+	if err != nil {
+		return nil, err
+	}
+{{- if eq (extensibility .Struct) "MUTABLE"}}
+	dsize, err := dec.ReadDHeader()
+	if err != nil {
+		return nil, err
+	}
+	endPos := dec.Pos() + int(dsize)
+	var keys []cdr.DDSKeyField
+	for dec.Pos() < endPos {
+		_, lc, memberID, nextInt, err := dec.ReadEMHeader()
+		if err != nil {
+			return nil, err
+		}
+		fsize := int(cdr.EMFieldSize(lc, nextInt))
+		switch memberID {
+{{- range .KeyFields}}
+		case {{.MemberID}}: // @key {{.FieldName}}
+			keys = append(keys, cdr.DDSKeyField{
+				Offset: uint32(dec.Pos() - 4),
+				Size:   uint32(fsize),
+				TypeHint: cdr.{{.TypeHint}},
+			})
+			if err := dec.Skip(fsize); err != nil {
+				return nil, err
+			}
+{{- end}}
+		default:
+			if err := dec.Skip(fsize); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return keys, nil
+{{- else}}
+{{- /* FINAL or APPENDABLE */}}
+{{- if eq (extensibility .Struct) "APPENDABLE"}}
+	if _, err := dec.ReadDHeader(); err != nil {
+		return nil, err
+	}
+{{- end}}
+	var keys []cdr.DDSKeyField
+{{- range .AllFields}}
+{{- if .IsKey}}
+	// @key field: {{.Name}}
+{{- if gt .Alignment 1}}
+	dec.Align({{.Alignment}})
+{{- end}}
+	{
+		offset := uint32(dec.Pos() - 4)
+{{- if gt .FixedSize 0}}
+		keys = append(keys, cdr.DDSKeyField{Offset: offset, Size: {{.FixedSize}}, TypeHint: cdr.{{.TypeHint}}})
+		if err := dec.Skip({{.FixedSize}}); err != nil {
+			return nil, err
+		}
+{{- else if .IsString}}
+		startPos := dec.Pos()
+		if _, err := dec.ReadString(); err != nil {
+			return nil, err
+		}
+		keys = append(keys, cdr.DDSKeyField{Offset: offset, Size: uint32(dec.Pos() - startPos), TypeHint: cdr.{{.TypeHint}}})
+{{- else}}
+		_ = offset
+		return nil, fmt.Errorf("cdr: ExtractKeyFields: variable-size key field {{.Name}} not supported")
+{{- end}}
+	}
+{{- else}}
+	// skip field: {{.Name}}
+{{- if .IsOptional}}
+	{
+		present, err := dec.ReadBool()
+		if err != nil {
+			return nil, err
+		}
+		if present {
+{{- if gt .FixedSize 0}}
+{{- if gt .Alignment 1}}
+			dec.Align({{.Alignment}})
+{{- end}}
+			if err := dec.Skip({{.FixedSize}}); err != nil {
+				return nil, err
+			}
+{{- else if .IsString}}
+			if _, err := dec.ReadString(); err != nil {
+				return nil, err
+			}
+{{- else if .IsSequence}}
+			seqLen, err := dec.ReadUint32()
+			if err != nil {
+				return nil, err
+			}
+{{- if gt .SeqElemSize 0}}
+			if err := dec.Skip(int(seqLen) * {{.SeqElemSize}}); err != nil {
+				return nil, err
+			}
+{{- else}}
+			_ = seqLen
+			return nil, fmt.Errorf("cdr: ExtractKeyFields: variable-element sequence {{.Name}} not supported")
+{{- end}}
+{{- else if .IsCompound}}
+			var tmp {{.GoType}}
+			if err := tmp.DecodeCDR(dec); err != nil {
+				return nil, err
+			}
+{{- end}}
+		}
+	}
+{{- else}}
+{{- if gt .FixedSize 0}}
+{{- if gt .Alignment 1}}
+	dec.Align({{.Alignment}})
+{{- end}}
+	if err := dec.Skip({{.FixedSize}}); err != nil {
+		return nil, err
+	}
+{{- else if .IsString}}
+	if _, err := dec.ReadString(); err != nil {
+		return nil, err
+	}
+{{- else if .IsSequence}}
+	{
+		seqLen, err := dec.ReadUint32()
+		if err != nil {
+			return nil, err
+		}
+{{- if gt .SeqElemSize 0}}
+		if err := dec.Skip(int(seqLen) * {{.SeqElemSize}}); err != nil {
+			return nil, err
+		}
+{{- else}}
+		_ = seqLen
+		return nil, fmt.Errorf("cdr: ExtractKeyFields: variable-element sequence {{.Name}} not supported")
+{{- end}}
+	}
+{{- else if .IsCompound}}
+	{
+		var tmp {{.GoType}}
+		if err := tmp.DecodeCDR(dec); err != nil {
+			return nil, err
+		}
+	}
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end}}
+	return keys, nil
+{{- end}}
+}
