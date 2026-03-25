@@ -413,10 +413,10 @@ func TestEnumComputedValue(t *testing.T) {
 	val5 := int64(5)
 	values := []ast.EnumValue{
 		{Name: "RED", Value: &val0},
-		{Name: "GREEN"},          // should be 1
+		{Name: "GREEN"}, // should be 1
 		{Name: "BLUE", Value: &val5},
-		{Name: "YELLOW"},         // should be 6
-		{Name: "PURPLE"},         // should be 7
+		{Name: "YELLOW"}, // should be 6
+		{Name: "PURPLE"}, // should be 7
 	}
 
 	want := []int64{0, 1, 5, 6, 7}
@@ -515,6 +515,29 @@ func TestCdrSerializedSizeRec(t *testing.T) {
 	ntInherit := &ast.NamedType{Name: "Derived", Resolved: inheritStruct}
 	if got := cdrSerializedSizeRec(ntInherit, nil); got != 0 {
 		t.Errorf("inherited struct size = %d, want 0", got)
+	}
+
+	// Typedef of array (e.g., NumericGUID = typedef octet GUID_t[16])
+	arrayTD := &ast.Typedef{
+		Name: "NumericGUID",
+		Type: &ast.ArrayType{ElemType: &ast.BasicType{Name: "octet"}, Size: 16},
+	}
+	ntArrayTD := &ast.NamedType{Name: "NumericGUID", Resolved: arrayTD}
+	if got := cdrSerializedSizeRec(ntArrayTD, nil); got != 16 {
+		t.Errorf("array typedef size = %d, want 16", got)
+	}
+
+	// Struct containing array typedef fields (e.g., IdentifierType)
+	idStruct := &ast.Struct{
+		Name: "IdentifierType",
+		Fields: []ast.Field{
+			{Name: "id", Type: &ast.NamedType{Name: "NumericGUID", Resolved: arrayTD}},
+			{Name: "parentId", Type: &ast.NamedType{Name: "NumericGUID", Resolved: arrayTD}},
+		},
+	}
+	ntID := &ast.NamedType{Name: "IdentifierType", Resolved: idStruct}
+	if got := cdrSerializedSizeRec(ntID, nil); got != 32 {
+		t.Errorf("IdentifierType struct size = %d, want 32", got)
 	}
 }
 
@@ -718,7 +741,7 @@ func TestComputeKeyFields_RuntimeOptional(t *testing.T) {
 func TestComputeKeyFields_Mutable(t *testing.T) {
 	// MUTABLE always requires runtime
 	s := &ast.Struct{
-		Name: "Msg",
+		Name:        "Msg",
 		Annotations: []ast.Annotation{{Name: "mutable"}},
 		Fields: []ast.Field{
 			{Name: "id", Type: &ast.BasicType{Name: "int32"}, Annotations: []ast.Annotation{{Name: "key"}}},

@@ -12,9 +12,9 @@ import (
 // computeResult caches the computed TypeIdentifier and serialized size
 // for a named type to avoid redundant computation.
 type computeResult struct {
-	MinimalTID  TypeIdentifier
-	MinimalSize uint32
-	CompleteTID TypeIdentifier
+	MinimalTID   TypeIdentifier
+	MinimalSize  uint32
+	CompleteTID  TypeIdentifier
 	CompleteSize uint32
 }
 

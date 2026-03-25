@@ -26,19 +26,19 @@ type Config struct {
 
 // genUnit represents a single Go package to generate.
 type genUnit struct {
-	PackageName string
-	PackagePath string
-	ModulePath  []string    // flattened IDL module path, e.g., ["Org", "Common"]
-	FileName    string      // output file name without extension (e.g., "GlobalHoveringHoverType")
-	Imports     []pkgImport // cross-package imports needed
-	Structs     []*ast.Struct
-	Enums       []*ast.Enum
-	Unions      []*ast.Union
-	Typedefs    []*ast.Typedef
-	Consts      []*ast.Const
-	Skipped          []*ast.SkippedDecl    // skipped declarations to emit as placeholders
-	TypeInfoCtx      *xtypes.ComputeContext // shared across all types in a unit
-	NeedsRuntimeKeys bool                   // true if any struct needs runtime key extraction
+	PackageName    string
+	PackagePath    string
+	ModulePath     []string    // flattened IDL module path, e.g., ["Org", "Common"]
+	FileName       string      // output file name without extension (e.g., "GlobalHoveringHoverType")
+	Imports        []pkgImport // cross-package imports needed
+	Structs        []*ast.Struct
+	Enums          []*ast.Enum
+	Unions         []*ast.Union
+	Typedefs       []*ast.Typedef
+	Consts         []*ast.Const
+	Skipped        []*ast.SkippedDecl     // skipped declarations to emit as placeholders
+	TypeInfoCtx    *xtypes.ComputeContext // shared across all types in a unit
+	NeedsFmtImport bool                   // true if generated body references "fmt" package
 }
 
 // pkgImport represents a Go import for a cross-package type reference.
@@ -59,57 +59,57 @@ type Generator struct {
 // New creates a new Generator.
 func New(cfg Config) (*Generator, error) {
 	funcMap := template.FuncMap{
-		"goType":            goType,
-		"goBasicType":       goBasicType,
-		"goFieldType":       goFieldType,
-		"pascalCase":        pascalCase,
-		"camelCase":         camelCase,
-		"snakeCase":         snakeCase,
-		"hasAnnotation":     func(annots []ast.Annotation, name string) bool { return hasAnnotation(annots, name) },
-		"annotationValue":   func(annots []ast.Annotation, name, param string) string { return annotationValue(annots, name, param) },
-		"extensibility":     extensibility,
-		"isOptional":        isOptional,
-		"isKey":             isKey,
-		"structHasKeyField": structHasKeyField,
-		"cdrAlignment":      cdrAlignment,
-		"cdrWriteFunc":      cdrWriteFunc,
-		"cdrReadFunc":       cdrReadFunc,
-		"isPrimitive":       isPrimitive,
-		"isString":          isString,
-		"isFixedPrimitive":  isFixedPrimitive,
-		"isSequence":        isSequence,
-		"isArray":           isArray,
-		"sequenceElemType":  sequenceElemType,
-		"arrayElemType":     arrayElemType,
-		"arraySize":         arraySize,
-		"seqElemTypeRef":    seqElemTypeRef,
-		"arrElemTypeRef":    arrElemTypeRef,
-		"enumValueInt":      enumValueInt,
-		"enumComputedValue": enumComputedValue,
-		"hasExplicitValue":  hasExplicitValue,
-		"fieldMemberID":     fieldMemberID,
-		"cdrSerializedSize": cdrSerializedSize,
-		"unionDiscriminatorIsEnum":          unionDiscriminatorIsEnum,
-		"unionDiscriminatorEnum":           unionDiscriminatorEnum,
-		"unionDiscriminatorGoType":         unionDiscriminatorGoType,
-		"unionCaseGoConstant":              unionCaseGoConstant,
-		"unionCaseWrapperName":             unionCaseWrapperName,
-		"unionInterfaceName":               unionInterfaceName,
-		"unionDiscriminatorWriteFunc":      unionDiscriminatorWriteFunc,
-		"unionDiscriminatorReadFunc":       unionDiscriminatorReadFunc,
-		"unionDiscriminatorCastToWire":     unionDiscriminatorCastToWire,
-		"unionSwitchExpr":                  unionSwitchExpr,
-		"unionDefaultDiscriminatorGoType":  unionDefaultDiscriminatorGoType,
-		"unionHasDefaultCase":              unionHasDefaultCase,
-		"isNestedStruct":          isNestedStruct,
-		"computeKeyFields":        computeKeyFields,
-		"needsRuntimeKeyExtract":  needsRuntimeKeyExtract,
-		"keyTypeHint":             keyTypeHint,
-		"lower":                   strings.ToLower,
-		"upper":             strings.ToUpper,
-		"add":               func(a, b int) int { return a + b },
-		"structTypeInfoBytes": structTypeInfoBytes,
-		"unionTypeInfoBytes":  unionTypeInfoBytes,
+		"goType":                          goType,
+		"goBasicType":                     goBasicType,
+		"goFieldType":                     goFieldType,
+		"pascalCase":                      pascalCase,
+		"camelCase":                       camelCase,
+		"snakeCase":                       snakeCase,
+		"hasAnnotation":                   func(annots []ast.Annotation, name string) bool { return hasAnnotation(annots, name) },
+		"annotationValue":                 func(annots []ast.Annotation, name, param string) string { return annotationValue(annots, name, param) },
+		"extensibility":                   extensibility,
+		"isOptional":                      isOptional,
+		"isKey":                           isKey,
+		"structHasKeyField":               structHasKeyField,
+		"cdrAlignment":                    cdrAlignment,
+		"cdrWriteFunc":                    cdrWriteFunc,
+		"cdrReadFunc":                     cdrReadFunc,
+		"isPrimitive":                     isPrimitive,
+		"isString":                        isString,
+		"isFixedPrimitive":                isFixedPrimitive,
+		"isSequence":                      isSequence,
+		"isArray":                         isArray,
+		"sequenceElemType":                sequenceElemType,
+		"arrayElemType":                   arrayElemType,
+		"arraySize":                       arraySize,
+		"seqElemTypeRef":                  seqElemTypeRef,
+		"arrElemTypeRef":                  arrElemTypeRef,
+		"enumValueInt":                    enumValueInt,
+		"enumComputedValue":               enumComputedValue,
+		"hasExplicitValue":                hasExplicitValue,
+		"fieldMemberID":                   fieldMemberID,
+		"cdrSerializedSize":               cdrSerializedSize,
+		"unionDiscriminatorIsEnum":        unionDiscriminatorIsEnum,
+		"unionDiscriminatorEnum":          unionDiscriminatorEnum,
+		"unionDiscriminatorGoType":        unionDiscriminatorGoType,
+		"unionCaseGoConstant":             unionCaseGoConstant,
+		"unionCaseWrapperName":            unionCaseWrapperName,
+		"unionInterfaceName":              unionInterfaceName,
+		"unionDiscriminatorWriteFunc":     unionDiscriminatorWriteFunc,
+		"unionDiscriminatorReadFunc":      unionDiscriminatorReadFunc,
+		"unionDiscriminatorCastToWire":    unionDiscriminatorCastToWire,
+		"unionSwitchExpr":                 unionSwitchExpr,
+		"unionDefaultDiscriminatorGoType": unionDefaultDiscriminatorGoType,
+		"unionHasDefaultCase":             unionHasDefaultCase,
+		"isNestedStruct":                  isNestedStruct,
+		"computeKeyFields":                computeKeyFields,
+		"needsRuntimeKeyExtract":          needsRuntimeKeyExtract,
+		"keyTypeHint":                     keyTypeHint,
+		"lower":                           strings.ToLower,
+		"upper":                           strings.ToUpper,
+		"add":                             func(a, b int) int { return a + b },
+		"structTypeInfoBytes":             structTypeInfoBytes,
+		"unionTypeInfoBytes":              unionTypeInfoBytes,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.go.tmpl")
@@ -456,51 +456,43 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 	// Resolve cross-package type references before rendering.
 	g.preprocessUnit(unit)
 
-	// Pre-compute key field info for all structs before rendering the file
-	// header, so that NeedsRuntimeKeys is set correctly for the import block.
+	// Pre-compute key field info for all structs.
 	var keyFieldsMap map[string][]keyFieldInfo
 	if len(unit.Structs) > 0 {
 		keyFieldsMap = make(map[string][]keyFieldInfo, len(unit.Structs))
 		for _, s := range unit.Structs {
-			kf := computeKeyFields(s)
-			keyFieldsMap[s.Name] = kf
-			if needsRuntimeKeyExtract(kf) {
-				unit.NeedsRuntimeKeys = true
-			}
+			keyFieldsMap[s.Name] = computeKeyFields(s)
 		}
 	}
 
-	var buf bytes.Buffer
-
-	// Render file header
-	if err := g.templates.ExecuteTemplate(&buf, "file.go.tmpl", unit); err != nil {
-		return nil, fmt.Errorf("execute file template: %w", err)
-	}
+	// Render body (everything except the file header) first, so we can
+	// inspect the output to determine which imports are actually needed.
+	var body bytes.Buffer
 
 	// Render consts
 	if len(unit.Consts) > 0 {
-		if err := g.templates.ExecuteTemplate(&buf, "const.go.tmpl", unit); err != nil {
+		if err := g.templates.ExecuteTemplate(&body, "const.go.tmpl", unit); err != nil {
 			return nil, fmt.Errorf("execute const template: %w", err)
 		}
 	}
 
 	// Render typedefs
 	if len(unit.Typedefs) > 0 {
-		if err := g.templates.ExecuteTemplate(&buf, "typedef.go.tmpl", unit); err != nil {
+		if err := g.templates.ExecuteTemplate(&body, "typedef.go.tmpl", unit); err != nil {
 			return nil, fmt.Errorf("execute typedef template: %w", err)
 		}
 	}
 
 	// Render enums
 	if len(unit.Enums) > 0 {
-		if err := g.templates.ExecuteTemplate(&buf, "enum.go.tmpl", unit); err != nil {
+		if err := g.templates.ExecuteTemplate(&body, "enum.go.tmpl", unit); err != nil {
 			return nil, fmt.Errorf("execute enum template: %w", err)
 		}
 	}
 
 	// Render unions
 	if len(unit.Unions) > 0 {
-		if err := g.templates.ExecuteTemplate(&buf, "union.go.tmpl", unit); err != nil {
+		if err := g.templates.ExecuteTemplate(&body, "union.go.tmpl", unit); err != nil {
 			return nil, fmt.Errorf("execute union template: %w", err)
 		}
 	}
@@ -508,15 +500,15 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 	// Render placeholder types for skipped declarations
 	for _, sk := range unit.Skipped {
 		name := pascalCase(sk.Name)
-		fmt.Fprintf(&buf, "\n// %s is a placeholder for IDL %s (not fully supported).\ntype %s struct{}\n", name, sk.Kind, name)
-		fmt.Fprintf(&buf, "\nfunc (s *%s) EncodeCDR(enc *cdr.Encoder) error { return nil }\n", name)
-		fmt.Fprintf(&buf, "func (s *%s) DecodeCDR(dec *cdr.Decoder) error { return nil }\n", name)
+		fmt.Fprintf(&body, "\n// %s is a placeholder for IDL %s (not fully supported).\ntype %s struct{}\n", name, sk.Kind, name)
+		fmt.Fprintf(&body, "\nfunc (s *%s) EncodeCDR(enc *cdr.Encoder) error { return nil }\n", name)
+		fmt.Fprintf(&body, "func (s *%s) DecodeCDR(dec *cdr.Decoder) error { return nil }\n", name)
 	}
 
 	// Render structs
 	if len(unit.Structs) > 0 {
 
-		if err := g.templates.ExecuteTemplate(&buf, "struct.go.tmpl", unit); err != nil {
+		if err := g.templates.ExecuteTemplate(&body, "struct.go.tmpl", unit); err != nil {
 			return nil, fmt.Errorf("execute struct template: %w", err)
 		}
 
@@ -530,15 +522,15 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 
 			switch ext {
 			case "FINAL":
-				if err := g.templates.ExecuteTemplate(&buf, "marshal_final.go.tmpl", data); err != nil {
+				if err := g.templates.ExecuteTemplate(&body, "marshal_final.go.tmpl", data); err != nil {
 					return nil, fmt.Errorf("execute marshal_final template: %w", err)
 				}
 			case "APPENDABLE":
-				if err := g.templates.ExecuteTemplate(&buf, "marshal_appendable.go.tmpl", data); err != nil {
+				if err := g.templates.ExecuteTemplate(&body, "marshal_appendable.go.tmpl", data); err != nil {
 					return nil, fmt.Errorf("execute marshal_appendable template: %w", err)
 				}
 			case "MUTABLE":
-				if err := g.templates.ExecuteTemplate(&buf, "marshal_mutable.go.tmpl", data); err != nil {
+				if err := g.templates.ExecuteTemplate(&body, "marshal_mutable.go.tmpl", data); err != nil {
 					return nil, fmt.Errorf("execute marshal_mutable template: %w", err)
 				}
 			}
@@ -552,7 +544,7 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 					KeyFields   []keyFieldInfo
 					AllFields   []keyExtractFieldInfo
 				}{unit.PackageName, s, keyFields, buildKeyExtractFields(s)}
-				if err := g.templates.ExecuteTemplate(&buf, "key_extract.go.tmpl", keData); err != nil {
+				if err := g.templates.ExecuteTemplate(&body, "key_extract.go.tmpl", keData); err != nil {
 					return nil, fmt.Errorf("execute key_extract template: %w", err)
 				}
 			}
@@ -562,10 +554,19 @@ func (g *Generator) renderUnit(unit *genUnit) ([]byte, error) {
 	// Render TypeInfo variables for structs and unions
 	if len(unit.Structs) > 0 || len(unit.Unions) > 0 {
 		unit.TypeInfoCtx = xtypes.NewComputeContext()
-		if err := g.templates.ExecuteTemplate(&buf, "typeinfo.go.tmpl", unit); err != nil {
+		if err := g.templates.ExecuteTemplate(&body, "typeinfo.go.tmpl", unit); err != nil {
 			return nil, fmt.Errorf("execute typeinfo template: %w", err)
 		}
 	}
+
+	// Determine whether the body actually uses "fmt" and render the header.
+	unit.NeedsFmtImport = bytes.Contains(body.Bytes(), []byte("fmt."))
+
+	var buf bytes.Buffer
+	if err := g.templates.ExecuteTemplate(&buf, "file.go.tmpl", unit); err != nil {
+		return nil, fmt.Errorf("execute file template: %w", err)
+	}
+	buf.Write(body.Bytes())
 
 	// Format the generated source
 	formatted, err := format.Source(buf.Bytes())

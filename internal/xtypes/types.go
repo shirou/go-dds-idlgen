@@ -11,31 +11,31 @@ type TypeKind = byte
 
 // Primitive TypeKind constants.
 const (
-	TK_NONE    TypeKind = 0x00
-	TK_BOOLEAN TypeKind = 0x01
-	TK_BYTE    TypeKind = 0x02
-	TK_INT16   TypeKind = 0x03
-	TK_INT32   TypeKind = 0x04
-	TK_INT64   TypeKind = 0x05
-	TK_UINT16  TypeKind = 0x06
-	TK_UINT32  TypeKind = 0x07
-	TK_UINT64  TypeKind = 0x08
-	TK_FLOAT32 TypeKind = 0x09
-	TK_FLOAT64 TypeKind = 0x0a
+	TK_NONE     TypeKind = 0x00
+	TK_BOOLEAN  TypeKind = 0x01
+	TK_BYTE     TypeKind = 0x02
+	TK_INT16    TypeKind = 0x03
+	TK_INT32    TypeKind = 0x04
+	TK_INT64    TypeKind = 0x05
+	TK_UINT16   TypeKind = 0x06
+	TK_UINT32   TypeKind = 0x07
+	TK_UINT64   TypeKind = 0x08
+	TK_FLOAT32  TypeKind = 0x09
+	TK_FLOAT64  TypeKind = 0x0a
 	TK_FLOAT128 TypeKind = 0x0b
-	TK_INT8    TypeKind = 0x0c
-	TK_UINT8   TypeKind = 0x0d
-	TK_CHAR8   TypeKind = 0x10
-	TK_CHAR16  TypeKind = 0x11
+	TK_INT8     TypeKind = 0x0c
+	TK_UINT8    TypeKind = 0x0d
+	TK_CHAR8    TypeKind = 0x10
+	TK_CHAR16   TypeKind = 0x11
 )
 
 // Constructed type TypeKind constants.
 const (
-	TK_STRING8  TypeKind = 0x20
-	TK_STRING16 TypeKind = 0x21
-	TK_ALIAS    TypeKind = 0x30
-	TK_ENUM     TypeKind = 0x40
-	TK_BITMASK  TypeKind = 0x41
+	TK_STRING8    TypeKind = 0x20
+	TK_STRING16   TypeKind = 0x21
+	TK_ALIAS      TypeKind = 0x30
+	TK_ENUM       TypeKind = 0x40
+	TK_BITMASK    TypeKind = 0x41
 	TK_ANNOTATION TypeKind = 0x50
 	TK_STRUCTURE  TypeKind = 0x51
 	TK_UNION      TypeKind = 0x52
@@ -47,17 +47,17 @@ const (
 
 // TypeIdentifier discriminator values for parameterized types.
 const (
-	TI_STRING8_SMALL          byte = 0x70
-	TI_STRING8_LARGE          byte = 0x71
-	TI_STRING16_SMALL         byte = 0x72
-	TI_STRING16_LARGE         byte = 0x73
-	TI_PLAIN_SEQUENCE_SMALL   byte = 0x80
-	TI_PLAIN_SEQUENCE_LARGE   byte = 0x81
-	TI_PLAIN_ARRAY_SMALL      byte = 0x90
-	TI_PLAIN_ARRAY_LARGE      byte = 0x91
-	TI_PLAIN_MAP_SMALL        byte = 0xA0
-	TI_PLAIN_MAP_LARGE        byte = 0xA1
-	TI_STRONGLY_CONNECTED     byte = 0xB0
+	TI_STRING8_SMALL        byte = 0x70
+	TI_STRING8_LARGE        byte = 0x71
+	TI_STRING16_SMALL       byte = 0x72
+	TI_STRING16_LARGE       byte = 0x73
+	TI_PLAIN_SEQUENCE_SMALL byte = 0x80
+	TI_PLAIN_SEQUENCE_LARGE byte = 0x81
+	TI_PLAIN_ARRAY_SMALL    byte = 0x90
+	TI_PLAIN_ARRAY_LARGE    byte = 0x91
+	TI_PLAIN_MAP_SMALL      byte = 0xA0
+	TI_PLAIN_MAP_LARGE      byte = 0xA1
+	TI_STRONGLY_CONNECTED   byte = 0xB0
 )
 
 // Equivalence kind discriminators.
@@ -92,24 +92,24 @@ type TypeIdentifier struct {
 	StringLBound uint32
 
 	// TI_PLAIN_SEQUENCE_SMALL
-	SeqSHeader   PlainCollectionHeader
-	SeqSBound    uint8
-	SeqSElemID   *TypeIdentifier
+	SeqSHeader PlainCollectionHeader
+	SeqSBound  uint8
+	SeqSElemID *TypeIdentifier
 
 	// TI_PLAIN_SEQUENCE_LARGE
-	SeqLHeader   PlainCollectionHeader
-	SeqLBound    uint32
-	SeqLElemID   *TypeIdentifier
+	SeqLHeader PlainCollectionHeader
+	SeqLBound  uint32
+	SeqLElemID *TypeIdentifier
 
 	// TI_PLAIN_ARRAY_SMALL
-	ArrSHeader   PlainCollectionHeader
-	ArrSBounds   []uint8
-	ArrSElemID   *TypeIdentifier
+	ArrSHeader PlainCollectionHeader
+	ArrSBounds []uint8
+	ArrSElemID *TypeIdentifier
 
 	// TI_PLAIN_ARRAY_LARGE
-	ArrLHeader   PlainCollectionHeader
-	ArrLBounds   []uint32
-	ArrLElemID   *TypeIdentifier
+	ArrLHeader PlainCollectionHeader
+	ArrLBounds []uint32
+	ArrLElemID *TypeIdentifier
 }
 
 // PlainCollectionHeader is the header for plain collection TypeIdentifiers.
@@ -120,13 +120,13 @@ type PlainCollectionHeader struct {
 
 // MemberFlag bit values.
 const (
-	MemberFlagTryConstruct1   uint16 = 0x0001
-	MemberFlagTryConstruct2   uint16 = 0x0002
-	MemberFlagIsExternal      uint16 = 0x0004
-	MemberFlagIsOptional      uint16 = 0x0008
+	MemberFlagTryConstruct1    uint16 = 0x0001
+	MemberFlagTryConstruct2    uint16 = 0x0002
+	MemberFlagIsExternal       uint16 = 0x0004
+	MemberFlagIsOptional       uint16 = 0x0008
 	MemberFlagIsMustUnderstand uint16 = 0x0010
-	MemberFlagIsKey           uint16 = 0x0020
-	MemberFlagIsDefault       uint16 = 0x0040
+	MemberFlagIsKey            uint16 = 0x0020
+	MemberFlagIsDefault        uint16 = 0x0040
 )
 
 // StructTypeFlag bit values (bitmask positions from XTypes spec).
@@ -172,10 +172,10 @@ type MinimalMemberDetail struct {
 
 // MinimalUnionType represents a union type in the minimal type representation.
 type MinimalUnionType struct {
-	UnionFlags    uint16
-	Header        MinimalUnionHeader
-	DiscCommon    CommonDiscriminatorMember
-	Members       []MinimalUnionMember
+	UnionFlags uint16
+	Header     MinimalUnionHeader
+	DiscCommon CommonDiscriminatorMember
+	Members    []MinimalUnionMember
 }
 
 // MinimalUnionHeader is the header of a MinimalUnionType.
@@ -197,11 +197,11 @@ type MinimalUnionMember struct {
 
 // CommonUnionMember holds the common part of a union member.
 type CommonUnionMember struct {
-	MemberID      uint32
-	MemberFlags   uint16
-	TypeID        TypeIdentifier
-	LabelCount    uint32
-	Labels        []int32 // case label values
+	MemberID    uint32
+	MemberFlags uint16
+	TypeID      TypeIdentifier
+	LabelCount  uint32
+	Labels      []int32 // case label values
 }
 
 // MinimalEnumType represents an enum type in the minimal type representation.
@@ -238,7 +238,7 @@ const (
 
 // MinimalTypeObject is a discriminated union wrapping type-specific objects.
 type MinimalTypeObject struct {
-	Kind      byte // TOK_STRUCTURE, TOK_UNION, TOK_ENUM
+	Kind       byte // TOK_STRUCTURE, TOK_UNION, TOK_ENUM
 	StructType *MinimalStructType
 	UnionType  *MinimalUnionType
 	EnumType   *MinimalEnumType
@@ -246,7 +246,7 @@ type MinimalTypeObject struct {
 
 // TypeIdWithSize pairs a TypeIdentifier with the serialized size of its TypeObject.
 type TypeIdWithSize struct {
-	TypeID              TypeIdentifier
+	TypeID                   TypeIdentifier
 	TypeObjectSerializedSize uint32
 }
 

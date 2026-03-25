@@ -72,9 +72,9 @@ type Const struct {
 // Union represents an IDL discriminated union.
 type Union struct {
 	Name          string
-	Discriminator TypeRef      // switch type: NamedType (enum) or BasicType (integer)
+	Discriminator TypeRef // switch type: NamedType (enum) or BasicType (integer)
 	Cases         []UnionCase
-	DefaultCase   *UnionCase   // nil if no default
+	DefaultCase   *UnionCase // nil if no default
 	Annotations   []Annotation
 }
 

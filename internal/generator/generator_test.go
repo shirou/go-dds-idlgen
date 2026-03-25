@@ -959,9 +959,9 @@ func TestGenerate_NestedFalseStruct(t *testing.T) {
 
 func TestGenerate_IsKeyed(t *testing.T) {
 	tests := []struct {
-		name       string
-		structDef  *ast.Struct
-		wantKeyed  bool
+		name      string
+		structDef *ast.Struct
+		wantKeyed bool
 	}{
 		{
 			name: "keyed struct returns true",
@@ -1095,8 +1095,8 @@ func TestGenerate_ExtractKeyFields(t *testing.T) {
 			wantSnippets: []string{
 				"func (s *RuntimeOpt) ExtractKeyFields(data []byte) ([]cdr.DDSKeyField, error)",
 				"dec, err := cdr.NewDecoder(data)",
-				"dec.ReadBool()",    // optional present flag
-				"dec.ReadString()",  // skip optional string
+				"dec.ReadBool()",   // optional present flag
+				"dec.ReadString()", // skip optional string
 				"@key field: source",
 			},
 			wantAbsent: []string{

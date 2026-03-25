@@ -651,6 +651,10 @@ func cdrSerializedSizeRec(t ast.TypeRef, visited map[*ast.Struct]bool) int {
 			}
 			visited[r] = true
 			return structFixedSize(r, visited)
+		case *ast.Typedef:
+			// resolveUnderlying stops at array/sequence typedefs (they have
+			// their own EncodeCDR methods), but we still need their size.
+			return cdrSerializedSizeRec(r.Type, visited)
 		}
 	}
 	return 0 // variable size (string, sequence, etc.)
